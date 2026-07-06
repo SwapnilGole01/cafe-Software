@@ -73,7 +73,7 @@ export default function App() {
           <Coffee className="w-4 h-4 text-amber-500 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
         </div>
         <p className="text-xs text-slate-500 font-semibold mt-4 tracking-wider uppercase animate-pulse">
-          Starting Classmate Cafe Server...
+          Starting cafe Software Server...
         </p>
       </div>
     );

@@ -7,6 +7,7 @@ import { api } from "../lib/api.ts";
 interface MenuManagerProps {
   menu: MenuItem[];
   onMenuChange: (updatedMenu: MenuItem[]) => void;
+  isReadOnly?: boolean;
 }
 
 interface MenuFormState {
@@ -26,7 +27,7 @@ const CATEGORIES = [
   "Shakes", "Desserts", "Other Beverages", "Winter Special"
 ];
 
-export const MenuManager: React.FC<MenuManagerProps> = ({ menu, onMenuChange }) => {
+export const MenuManager: React.FC<MenuManagerProps> = ({ menu, onMenuChange, isReadOnly = false }) => {
   const [showModal, setShowModal] = useState<boolean>(false);
   const [editingItemId, setEditingItemId] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState<boolean>(false);
@@ -199,13 +200,15 @@ export const MenuManager: React.FC<MenuManagerProps> = ({ menu, onMenuChange }) 
             Configure dishes, adjust prices, and toggle in-stock availability optimistically.
           </p>
         </div>
-        <button
-          onClick={handleOpenAddModal}
-          className="inline-flex items-center gap-1.5 px-4.5 py-2.5 bg-slate-900 hover:bg-slate-800 text-xs font-bold text-white rounded-xl cursor-pointer shadow-md transition-all shadow-slate-950/10"
-        >
-          <Plus className="w-4 h-4" />
-          Add Menu Item
-        </button>
+        {!isReadOnly && (
+          <button
+            onClick={handleOpenAddModal}
+            className="inline-flex items-center gap-1.5 px-4.5 py-2.5 bg-slate-900 hover:bg-slate-800 text-xs font-bold text-white rounded-xl cursor-pointer shadow-md transition-all shadow-slate-950/10"
+          >
+            <Plus className="w-4 h-4" />
+            Add Menu Item
+          </button>
+        )}
       </div>
 
       {/* Table list */}
@@ -218,13 +221,13 @@ export const MenuManager: React.FC<MenuManagerProps> = ({ menu, onMenuChange }) 
                 <th className="p-4">Category</th>
                 <th className="p-4">Price</th>
                 <th className="p-4">Availability</th>
-                <th className="p-4 text-right">Actions</th>
+                {!isReadOnly && <th className="p-4 text-right">Actions</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {menu.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="p-8 text-center text-slate-400 font-medium">
+                  <td colSpan={isReadOnly ? 4 : 5} className="p-8 text-center text-slate-400 font-medium">
                     No items in menu catalog.
                   </td>
                 </tr>
@@ -272,24 +275,26 @@ export const MenuManager: React.FC<MenuManagerProps> = ({ menu, onMenuChange }) 
                         {item.isAvailable ? "In Stock" : "Sold Out"}
                       </button>
                     </td>
-                    <td className="p-4 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <button
-                          onClick={() => handleOpenEditModal(item)}
-                          className="p-1.5 bg-slate-50 hover:bg-slate-150 border border-slate-200 text-slate-600 rounded-lg cursor-pointer transition-colors"
-                          title="Edit Item"
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteItem(item)}
-                          className="p-1.5 bg-red-50 hover:bg-red-100 border border-red-100 text-red-600 rounded-lg cursor-pointer transition-colors"
-                          title="Soft Delete (Sold Out)"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </td>
+                    {!isReadOnly && (
+                      <td className="p-4 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() => handleOpenEditModal(item)}
+                            className="p-1.5 bg-slate-50 hover:bg-slate-150 border border-slate-200 text-slate-600 rounded-lg cursor-pointer transition-colors"
+                            title="Edit Item"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteItem(item)}
+                            className="p-1.5 bg-red-50 hover:bg-red-100 border border-red-100 text-red-600 rounded-lg cursor-pointer transition-colors"
+                            title="Soft Delete (Sold Out)"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))
               )}

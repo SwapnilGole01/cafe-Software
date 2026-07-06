@@ -402,7 +402,7 @@ async function startServer() {
           isAvailable: true,
         },
       ]);
-      console.log("Seeded default Classmate Cafe menu items in Rupees");
+      console.log("Seeded default cafe Software menu items in Rupees");
     }
 
     // Deduplicate menu items by name automatically on startup
@@ -431,21 +431,21 @@ async function startServer() {
     // Force update existing default menu item photos to attractive, high-quality, professional food photos
     const defaultImagesMap: Record<string, string> = {
       "Veg Cheese Momo (Steam)": "https://images.unsplash.com/photo-1563245372-f21724e3856d?auto=format&fit=crop&w=600&q=80",
-      "Paneer Momo (Steam)": "https://images.unsplash.com/photo-1625220194771-7ebedd0b4a1b?auto=format&fit=crop&w=600&q=80",
+      "Paneer Momo (Steam)": "https://images.unsplash.com/photo-1563245372-f21724e3856d?auto=format&fit=crop&w=600&q=80",
       "Paneer Momo (Fried)": "https://images.unsplash.com/photo-1541696432-82c6da8ce7bf?auto=format&fit=crop&w=600&q=80",
       "Hot Chocolate": "https://images.unsplash.com/photo-1544787219-7f47ccb76574?auto=format&fit=crop&w=600&q=80",
-      "Cinnamon Hot Chocolate": "https://images.unsplash.com/photo-1577003833619-76bbd39a2760?auto=format&fit=crop&w=600&q=80",
-      "Penne Alfredo": "https://images.unsplash.com/photo-1555949258-ebc762fe463f?auto=format&fit=crop&w=600&q=80",
+      "Cinnamon Hot Chocolate": "https://images.unsplash.com/photo-1541167760496-1628856ab772?auto=format&fit=crop&w=600&q=80",
+      "Penne Alfredo": "https://images.unsplash.com/photo-1551183053-bf91a1d81141?auto=format&fit=crop&w=600&q=80",
       "Penne Arabiata": "https://images.unsplash.com/photo-1608897013039-887f21d8c804?auto=format&fit=crop&w=600&q=80",
       "Pesto Pasta": "https://images.unsplash.com/photo-1473093295043-cdd812d0e601?auto=format&fit=crop&w=600&q=80",
-      "Spaghetti Aglio e Olio": "https://images.unsplash.com/photo-1621996346565-e3bb64d0be5e?auto=format&fit=crop&w=600&q=80",
+      "Spaghetti Aglio e Olio": "https://images.unsplash.com/photo-1589301760014-d929f3979dbc?auto=format&fit=crop&w=600&q=80",
       "Veg Thai Curry with Rice": "https://images.unsplash.com/photo-1455619452474-d2be8b1e70cd?auto=format&fit=crop&w=600&q=80",
       "Hub Makhani with Rice": "https://images.unsplash.com/photo-1631452180519-c014fe946bc7?auto=format&fit=crop&w=600&q=80",
-      "Chilli Paneer": "https://images.unsplash.com/photo-1601050690597-df056fb4ce78?auto=format&fit=crop&w=600&q=80",
+      "Chilli Paneer": "https://images.unsplash.com/photo-1565557623262-b51c2513a641?auto=format&fit=crop&w=600&q=80",
       "Chilli Chicken": "https://images.unsplash.com/photo-1569058242253-92a9c755a0ec?auto=format&fit=crop&w=600&q=80",
       "Veggie Burger": "https://images.unsplash.com/photo-1525059696034-4967a8e1dca2?auto=format&fit=crop&w=600&q=80",
       "Chicken Burger": "https://images.unsplash.com/photo-1625813506062-0aeb1d7a094b?auto=format&fit=crop&w=600&q=80",
-      "Paneer Wrap": "https://images.unsplash.com/photo-1626700051175-6518c4793f4f?auto=format&fit=crop&w=600&q=80",
+      "Paneer Wrap": "https://images.unsplash.com/photo-1509722747041-616f39b57569?auto=format&fit=crop&w=600&q=80",
       "3 Cheese Pizza": "https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&w=600&q=80",
       "Paneer Tikka Pizza": "https://images.unsplash.com/photo-1571407970349-bc81e7e96d47?auto=format&fit=crop&w=600&q=80",
       "Cheese Garlic Bread": "https://images.unsplash.com/photo-1573140247632-f8fd74997d5c?auto=format&fit=crop&w=600&q=80",
@@ -576,6 +576,90 @@ async function startServer() {
     res.json({ user: req.user });
   });
 
+  // GET /api/auth/staff (Owner only)
+  app.get("/api/auth/staff", requireAdminAuth, async (req: AuthenticatedRequest, res) => {
+    try {
+      if (req.user?.role !== "owner") {
+        return res.status(403).json({ error: "Forbidden: Only owners can manage staff accounts" });
+      }
+      const allUsers = await db.select().from(users);
+      // Filter out owner or self (to be safe), returning receptionist/staff users
+      const staffList = allUsers
+        .filter((u) => u.role !== "owner")
+        .map((u) => ({
+          id: u.id,
+          email: u.email,
+          role: u.role,
+          createdAt: u.createdAt,
+        }));
+      res.json({ staff: staffList });
+    } catch (error) {
+      handleDbError(res, error, "Failed to retrieve staff list");
+    }
+  });
+
+  // POST /api/auth/register-staff (Owner only)
+  app.post("/api/auth/register-staff", requireAdminAuth, async (req: AuthenticatedRequest, res) => {
+    try {
+      if (req.user?.role !== "owner") {
+        return res.status(403).json({ error: "Forbidden: Only owners can register staff accounts" });
+      }
+      const { email, password } = req.body;
+      if (!email || !password) {
+        return res.status(400).json({ error: "Email and password are required" });
+      }
+
+      const existing = await db.select().from(users).where(eq(users.email, email)).limit(1);
+      if (existing.length > 0) {
+        return res.status(400).json({ error: "User already exists with this email" });
+      }
+
+      const hashedPassword = bcrypt.hashSync(password, 10);
+      const [newStaff] = await db
+        .insert(users)
+        .values({
+          email,
+          passwordHash: hashedPassword,
+          role: "reception",
+        })
+        .returning();
+
+      res.status(201).json({
+        message: "Receptionist staff registered successfully",
+        staff: { id: newStaff.id, email: newStaff.email, role: newStaff.role },
+      });
+    } catch (error) {
+      handleDbError(res, error, "Failed to register staff user");
+    }
+  });
+
+  // DELETE /api/auth/staff/:id (Owner only)
+  app.delete("/api/auth/staff/:id", requireAdminAuth, async (req: AuthenticatedRequest, res) => {
+    try {
+      if (req.user?.role !== "owner") {
+        return res.status(403).json({ error: "Forbidden: Only owners can delete staff accounts" });
+      }
+      const staffId = parseInt(req.params.id);
+      if (isNaN(staffId)) {
+        return res.status(400).json({ error: "Invalid staff ID" });
+      }
+
+      // Check if user exists and is not an owner
+      const [existing] = await db.select().from(users).where(eq(users.id, staffId)).limit(1);
+      if (!existing) {
+        return res.status(404).json({ error: "Staff user not found" });
+      }
+      if (existing.role === "owner") {
+        return res.status(400).json({ error: "Cannot delete owner accounts" });
+      }
+
+      await db.delete(users).where(eq(users.id, staffId));
+      res.json({ message: "Staff user deleted successfully" });
+    } catch (error) {
+      handleDbError(res, error, "Failed to delete staff user");
+    }
+  });
+
   // ---------------------------------------------------------------------------
   // PUBLIC CUSTOMER CHANNELS
   // ---------------------------------------------------------------------------
@@ -703,13 +787,23 @@ async function startServer() {
         });
       }
 
-      // 2. Insert new order
+      // 2. Calculate sequential token number for today
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const todayOrders = await db
+        .select()
+        .from(orders)
+        .where(gte(orders.createdAt, todayStart));
+      const tokenNumber = todayOrders.length + 1;
+
+      // 2.5 Insert new order
       const [newOrder] = await db
         .insert(orders)
         .values({
           tableId,
           status: "pending",
           totalPrice,
+          tokenNumber,
         })
         .returning();
 
@@ -851,6 +945,15 @@ async function startServer() {
         });
       }
 
+      // Calculate sequential token number for today
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const todayOrders = await db
+        .select()
+        .from(orders)
+        .where(gte(orders.createdAt, todayStart));
+      const tokenNumber = todayOrders.length + 1;
+
       // Insert new order
       const [newOrder] = await db
         .insert(orders)
@@ -858,6 +961,7 @@ async function startServer() {
           tableId,
           status: "pending",
           totalPrice,
+          tokenNumber,
         })
         .returning();
 
@@ -1537,6 +1641,7 @@ async function startServer() {
           status: orders.status,
           totalPrice: orders.totalPrice,
           paymentMethod: orders.paymentMethod,
+          billRequested: orders.billRequested,
           createdAt: orders.createdAt,
           updatedAt: orders.updatedAt,
         })

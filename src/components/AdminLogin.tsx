@@ -75,7 +75,7 @@ export default function AdminLogin({ onLoginSuccess }: AdminLoginProps) {
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-amber-500 text-slate-950 mb-4 shadow-lg shadow-amber-500/20">
             <Coffee className="w-8 h-8" />
           </div>
-          <h1 className="text-2xl font-semibold tracking-tight">Classmate Cafe</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">cafe Software</h1>
           <p className="text-slate-400 text-sm mt-1">Management Portal Control Console</p>
         </div>
 

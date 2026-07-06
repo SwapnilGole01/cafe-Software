@@ -36,6 +36,7 @@ export interface Order {
   totalPrice: number;
   billRequested?: boolean;
   paymentMethod?: "cash" | "online";
+  tokenNumber?: number | null;
   createdAt: string;
   updatedAt: string;
   items?: OrderItem[];

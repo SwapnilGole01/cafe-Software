@@ -186,4 +186,22 @@ export const api = {
   async getAdminHistory(): Promise<OrderHistoryRecord[]> {
     return apiFetch<OrderHistoryRecord[]>("/api/admin/history");
   },
+
+  async getStaffList(): Promise<{ id: number; email: string; role: string; createdAt: string }[]> {
+    const data = await apiFetch<{ staff: any[] }>("/api/auth/staff");
+    return data.staff;
+  },
+
+  async createStaffUser(email: string, password: string): Promise<{ staff: any }> {
+    return apiFetch<{ staff: any }>("/api/auth/register-staff", {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    });
+  },
+
+  async deleteStaffUser(id: number): Promise<{ message: string }> {
+    return apiFetch<{ message: string }>(`/api/auth/staff/${id}`, {
+      method: "DELETE",
+    });
+  },
 };

@@ -36,6 +36,7 @@ import { TableGrid } from "./TableGrid.tsx";
 import { OrderBoard } from "./OrderBoard.tsx";
 import { MenuManager } from "./MenuManager.tsx";
 import { SalesReport } from "./SalesReport.tsx";
+import { OrderHistoryView } from "./OrderHistoryView.tsx";
 
 interface AdminToast {
   id: string;
@@ -53,7 +54,9 @@ interface AdminDashboardProps {
 }
 
 export default function AdminDashboard({ owner, onLogout }: AdminDashboardProps) {
-  const [activeTab, setActiveTab] = useState<"overview" | "orders" | "tables" | "menu" | "feedback" | "reports">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "orders" | "tables" | "menu" | "feedback" | "reports" | "history" | "staff" | "bills">(
+    owner.role === "reception" ? "orders" : "overview"
+  );
   const [toasts, setToasts] = useState<AdminToast[]>([]);
   const [tablesList, setTablesList] = useState<Table[]>([]);
   const [menuList, setMenuList] = useState<MenuItem[]>([]);
@@ -62,9 +65,17 @@ export default function AdminDashboard({ owner, onLogout }: AdminDashboardProps)
   const [historyList, setHistoryList] = useState<OrderHistoryRecord[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Staff Management State
+  const [staffList, setStaffList] = useState<any[]>([]);
+  const [newStaffEmail, setNewStaffEmail] = useState("");
+  const [newStaffPassword, setNewStaffPassword] = useState("");
+  const [staffLoading, setStaffLoading] = useState(false);
+  const [staffError, setStaffError] = useState("");
+  const [staffSuccess, setStaffSuccess] = useState("");
+
   // Form states
   const [newTableLabel, setNewTableLabel] = useState("");
-  const [newTableCapacity, setNewTableCapacity] = useState(4);
+  const [newTableCapacity, setNewTableCapacity] = useState<number | "">(4);
   const [showAddTableModal, setShowAddTableModal] = useState(false);
 
   // Menu Form
@@ -90,6 +101,24 @@ export default function AdminDashboard({ owner, onLogout }: AdminDashboardProps)
   // Printing state for thermal receipt preview
   const [printingOrder, setPrintingOrder] = useState<any | null>(null);
 
+
+
+  // Public domain / QR code Base URL config
+  const [publicUrl, setPublicUrl] = useState<string>(() => {
+    const stored = localStorage.getItem("cafe_public_url");
+    if (stored) return stored;
+    const origin = window.location.origin;
+    if (origin.includes("ais-dev-")) {
+      return origin.replace("ais-dev-", "ais-pre-");
+    }
+    return origin;
+  });
+
+  const handleUpdatePublicUrl = (newUrl: string) => {
+    setPublicUrl(newUrl);
+    localStorage.setItem("cafe_public_url", newUrl);
+  };
+
   const fetchAllData = async () => {
     try {
       setLoading(true);
@@ -111,6 +140,66 @@ export default function AdminDashboard({ owner, onLogout }: AdminDashboardProps)
       setLoading(false);
     }
   };
+
+  const fetchStaff = async () => {
+    if (owner.role !== "owner") return;
+    try {
+      setStaffLoading(true);
+      setStaffError("");
+      const list = await api.getStaffList();
+      setStaffList(list);
+    } catch (err: any) {
+      setStaffError(err.message || "Failed to load staff list");
+    } finally {
+      setStaffLoading(false);
+    }
+  };
+
+  const handleCreateStaff = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newStaffEmail || !newStaffPassword) {
+      setStaffError("Please fill out all fields");
+      return;
+    }
+    try {
+      setStaffLoading(true);
+      setStaffError("");
+      setStaffSuccess("");
+      await api.createStaffUser(newStaffEmail, newStaffPassword);
+      setNewStaffEmail("");
+      setNewStaffPassword("");
+      setStaffSuccess("Receptionist staff added successfully!");
+      fetchStaff();
+    } catch (err: any) {
+      setStaffError(err.message || "Failed to create staff account");
+    } finally {
+      setStaffLoading(false);
+    }
+  };
+
+  const handleDeleteStaff = async (id: number) => {
+    if (!window.confirm("Are you sure you want to delete this receptionist account?")) {
+      return;
+    }
+    try {
+      setStaffLoading(true);
+      setStaffError("");
+      setStaffSuccess("");
+      await api.deleteStaffUser(id);
+      setStaffSuccess("Receptionist account deleted successfully.");
+      fetchStaff();
+    } catch (err: any) {
+      setStaffError(err.message || "Failed to delete staff account");
+    } finally {
+      setStaffLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === "staff" && owner.role === "owner") {
+      fetchStaff();
+    }
+  }, [activeTab, owner.role]);
 
   const [soundEnabled, setSoundEnabled] = useState<boolean>(() => {
     return localStorage.getItem("adminSoundEnabled") !== "false";
@@ -361,7 +450,8 @@ export default function AdminDashboard({ owner, onLogout }: AdminDashboardProps)
     e.preventDefault();
     if (!newTableLabel) return;
     try {
-      const added = await api.createTable(newTableLabel, newTableCapacity);
+      const capacity = typeof newTableCapacity === "number" ? newTableCapacity : 4;
+      const added = await api.createTable(newTableLabel, capacity);
       setTablesList((prev) => [...prev, added]);
       setNewTableLabel("");
       setNewTableCapacity(4);
@@ -494,7 +584,7 @@ export default function AdminDashboard({ owner, onLogout }: AdminDashboardProps)
       <!DOCTYPE html>
       <html>
       <head>
-        <title>Classmate Cafe - Receipt #${order.id}</title>
+        <title>cafe Software - Receipt #${order.id}</title>
         <style>
           @page {
             size: 80mm auto;
@@ -588,7 +678,7 @@ export default function AdminDashboard({ owner, onLogout }: AdminDashboardProps)
       </head>
       <body>
         <div class="header">
-          <h1>CLASSMATE CAFE</h1>
+          <h1>CAFE SOFTWARE</h1>
           <p>College Campus, Food Court Zone</p>
           <p>Tel: +91 98765 43210</p>
           <p>GSTIN: 27AAAAA1111A1Z1</p>
@@ -648,7 +738,7 @@ export default function AdminDashboard({ owner, onLogout }: AdminDashboardProps)
 
         <div class="footer">
           <p>Thank you for dining with us!</p>
-          <p>Classmate Cafe • Fuel for Minds</p>
+          <p>cafe Software • Fuel for Minds</p>
           <p>Share your feedback via the table QR!</p>
         </div>
 
@@ -719,19 +809,29 @@ export default function AdminDashboard({ owner, onLogout }: AdminDashboardProps)
             <div className="w-8 h-8 bg-amber-500 rounded-lg flex items-center justify-center shrink-0">
               <Coffee className="w-5 h-5 text-slate-900" />
             </div>
-            <span className="font-bold text-white tracking-tight hidden lg:inline truncate">Classmate Cafe</span>
+            <span className="font-bold text-white tracking-tight hidden lg:inline truncate">cafe Software</span>
           </div>
 
           <nav className="p-2 lg:p-4 space-y-1">
-            <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider pb-2 px-2 hidden lg:block">Overview</div>
+            <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider pb-2 px-2 hidden lg:block">
+              {owner.role === "reception" ? "Reception Panel" : "Overview"}
+            </div>
             {[
               { id: "overview", label: "Dashboard", icon: LayoutDashboard },
               { id: "reports", label: "Reports", icon: TrendingUp },
               { id: "orders", label: "Orders", icon: ClipboardList, badge: ordersList.filter(o => o.status === "pending").length },
               { id: "tables", label: "Tables", icon: Grid },
+              { id: "bills", label: "Bill Requests", icon: CreditCard, badge: ordersList.filter(o => o.billRequested && o.status !== "completed").length },
               { id: "menu", label: "Menu", icon: UtensilsCrossed },
+              { id: "history", label: "Order History", icon: Receipt },
               { id: "feedback", label: "Feedback", icon: MessageSquare },
-            ].map((tab) => {
+              { id: "staff", label: "Staff Accounts", icon: Users },
+            ].filter((tab) => {
+              if (owner.role === "reception") {
+                return ["orders", "tables", "bills", "menu", "history"].includes(tab.id);
+              }
+              return true;
+            }).map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
               return (
@@ -757,7 +857,7 @@ export default function AdminDashboard({ owner, onLogout }: AdminDashboardProps)
             })}
           </nav>
         </div>
-
+ 
         {/* User Logged Info */}
         <div className="p-2 lg:p-4 border-t border-slate-800 space-y-3 bg-slate-950/25">
           <div className="flex items-center justify-center lg:justify-start gap-3 p-2 bg-slate-800/50 rounded-lg">
@@ -765,7 +865,9 @@ export default function AdminDashboard({ owner, onLogout }: AdminDashboardProps)
               {owner.email.slice(0, 2)}
             </div>
             <div className="hidden lg:block flex-1 min-w-0">
-              <p className="text-xs font-medium text-white truncate">Owner Admin</p>
+              <p className="text-xs font-medium text-white truncate">
+                {owner.role === "reception" ? "Receptionist" : "Owner Admin"}
+              </p>
               <p className="text-[10px] text-slate-500 truncate">{owner.email}</p>
             </div>
           </div>
@@ -790,7 +892,10 @@ export default function AdminDashboard({ owner, onLogout }: AdminDashboardProps)
             {activeTab === "orders" && "Live Kitchen Queue"}
             {activeTab === "tables" && "Seating & QR Monitor"}
             {activeTab === "menu" && "Menu Catalog Console"}
+            {activeTab === "history" && "Completed Order Archive"}
             {activeTab === "feedback" && "Customer Guest Reviews"}
+            {activeTab === "staff" && "Receptionist Accounts"}
+            {activeTab === "bills" && "Active Seating Bill Requests"}
           </h2>
           <div className="flex items-center gap-3">
             {/* Notification Sound Controller */}
@@ -842,7 +947,83 @@ export default function AdminDashboard({ owner, onLogout }: AdminDashboardProps)
               <p className="text-xs font-medium text-slate-400">Loading console data...</p>
             </div>
           ) : (
-            <AnimatePresence mode="wait">
+            <>
+              {/* REAL-TIME PENDING BILL REQUEST ALERTS */}
+              {(() => {
+                const pendingBillOrders = ordersList.filter((o) => o.billRequested && o.status !== "completed");
+                if (pendingBillOrders.length === 0) return null;
+                return (
+                  <motion.div
+                    initial={{ opacity: 0, y: -15 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="mb-8 bg-rose-50 border border-rose-200 rounded-2xl p-5 shadow-sm ring-4 ring-rose-500/5"
+                  >
+                    <div className="flex items-center gap-2 mb-3 text-rose-800">
+                      <div className="relative flex h-3.5 w-3.5 shrink-0 items-center justify-center">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
+                      </div>
+                      <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                      <span className="font-extrabold text-xs uppercase tracking-wider">
+                        Immediate Attention Required: Bill Requested ({pendingBillOrders.length})
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {pendingBillOrders.map((order) => (
+                        <div
+                          key={order.id}
+                          className="bg-white border border-rose-150 rounded-xl p-4 flex flex-col justify-between shadow-xs hover:border-rose-300 transition-colors"
+                        >
+                          <div>
+                            <div className="flex justify-between items-start">
+                              <span className="text-[10px] font-bold font-mono text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
+                                Ticket #{order.id}
+                              </span>
+                              <span className="text-[10px] font-extrabold text-rose-700 bg-rose-100 px-2 py-0.5 rounded-full font-mono uppercase tracking-tight animate-pulse shrink-0">
+                                🧾 Bill Req
+                              </span>
+                            </div>
+                            <h4 className="font-extrabold text-slate-900 mt-2 text-sm">
+                              {order.tableLabel || `Seating Table ${order.tableId}`}
+                            </h4>
+                            <p className="text-xs text-slate-500 font-medium mt-1">
+                              Estimated Bill:{" "}
+                              <span className="font-bold text-slate-950 text-xs">
+                                ₹{(order.totalPrice * 1.08).toFixed(0)}
+                              </span>{" "}
+                              <span className="text-[10px] text-slate-400 font-normal">
+                                (with 8% GST/Service)
+                              </span>
+                            </p>
+                          </div>
+                          <div className="mt-4 pt-3 border-t border-slate-100 flex gap-2">
+                            <button
+                              id={`btn-bill-alert-print-${order.id}`}
+                              onClick={() => setPrintingOrder(order)}
+                              className="flex-1 inline-flex items-center justify-center gap-1.5 py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs cursor-pointer transition-all border border-slate-200"
+                              title="Print customer invoice bill slip"
+                            >
+                              <Printer className="w-3.5 h-3.5" />
+                              <span>Print Bill</span>
+                            </button>
+                            <button
+                              id={`btn-bill-alert-settle-${order.id}`}
+                              onClick={() => setSettleOrderId(order.id)}
+                              className="flex-1 inline-flex items-center justify-center gap-1.5 py-2 px-3 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl text-xs cursor-pointer transition-all shadow-sm shadow-rose-600/10 border border-rose-700"
+                            >
+                              <CreditCard className="w-3.5 h-3.5" />
+                              <span>Settle & Pay</span>
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </motion.div>
+                );
+              })()}
+
+              <AnimatePresence mode="wait">
               {/* 1. OVERVIEW / DASHBOARD TAB */}
               {activeTab === "overview" && (
                 <motion.div
@@ -1044,17 +1225,60 @@ export default function AdminDashboard({ owner, onLogout }: AdminDashboardProps)
               >
                 <div className="flex justify-between items-center">
                   <div>
-                    <h1 className="text-2xl font-bold tracking-tight text-slate-900">Manage Classmate Cafe Tables</h1>
+                    <h1 className="text-2xl font-bold tracking-tight text-slate-900">Manage cafe Software Tables</h1>
                     <p className="text-slate-500 text-xs mt-1">Configure physical seating layout, inspect statuses, and print QR Codes</p>
                   </div>
-                  <button
-                    onClick={() => setShowAddTableModal(true)}
-                    className="inline-flex items-center gap-1.5 px-4.5 py-2.5 bg-slate-900 hover:bg-slate-850 text-xs font-bold text-white rounded-xl cursor-pointer shadow-md shadow-slate-950/10 transition-all"
-                  >
-                    <Plus className="w-4 h-4" />
-                    Add Seating Table
-                  </button>
+                  {owner.role !== "reception" && (
+                    <button
+                      onClick={() => setShowAddTableModal(true)}
+                      className="inline-flex items-center gap-1.5 px-4.5 py-2.5 bg-slate-900 hover:bg-slate-850 text-xs font-bold text-white rounded-xl cursor-pointer shadow-md shadow-slate-950/10 transition-all"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Add Seating Table
+                    </button>
+                  )}
                 </div>
+
+                {/* Guest Ordering URL Settings Config Card */}
+                {owner.role !== "reception" && (
+                  <div className="bg-amber-50/40 border border-amber-200/50 rounded-2xl p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 font-sans">
+                    <div className="space-y-1 max-w-lg">
+                      <h3 className="text-xs font-black uppercase tracking-wider text-amber-800 flex items-center gap-1.5">
+                        <span className="relative flex h-2 w-2">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                        </span>
+                        Guest Ordering URL (QR Base)
+                      </h3>
+                      <p className="text-[11px] text-slate-600 leading-relaxed font-medium">
+                        If guests scan QR codes with their own mobiles, the link must point to a public domain. 
+                        {window.location.origin.includes("-dev-") && (
+                          <span className="font-bold text-amber-700 block mt-1.5">
+                            ⚠️ You are currently on a restricted dev URL. We have auto-routed your QR codes to the public preview domain.
+                          </span>
+                        )}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 w-full md:w-auto shrink-0">
+                      <input
+                        type="url"
+                        value={publicUrl}
+                        onChange={(e) => handleUpdatePublicUrl(e.target.value)}
+                        placeholder="e.g., https://your-cafe-url.run.app"
+                        className="flex-1 md:w-80 px-3 py-2 bg-white border border-slate-200 text-xs rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all font-mono"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleUpdatePublicUrl(window.location.origin.includes("-dev-") ? window.location.origin.replace("-dev-", "-pre-") : window.location.origin);
+                        }}
+                        className="px-3 py-2 bg-amber-100 hover:bg-amber-200 text-amber-800 font-bold text-xs rounded-xl border border-amber-200 transition-all active:scale-95 cursor-pointer select-none"
+                      >
+                        Reset
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 <TableGrid
                   tables={tablesList}
@@ -1063,6 +1287,7 @@ export default function AdminDashboard({ owner, onLogout }: AdminDashboardProps)
                   onUpdateOrderStatus={handleUpdateOrderStatus}
                   onShowQrCode={setActiveQrTable}
                   onPrintOrderBill={setPrintingOrder}
+                  publicUrl={publicUrl}
                 />
 
                 {/* Old Seating Grid hidden to preserve formatting safely */}
@@ -1070,7 +1295,7 @@ export default function AdminDashboard({ owner, onLogout }: AdminDashboardProps)
                   {/* Seating Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   {tablesList.map((table) => {
-                    const qrLink = `${window.location.origin}?table=${table.id}`;
+                    const qrLink = `${publicUrl}?table=${table.id}`;
                     return (
                       <div key={table.id} className="bg-white rounded-2xl border border-slate-150 p-6 shadow-sm flex flex-col justify-between space-y-6">
                         <div className="flex justify-between items-start">
@@ -1136,6 +1361,7 @@ export default function AdminDashboard({ owner, onLogout }: AdminDashboardProps)
                 <MenuManager
                   menu={menuList}
                   onMenuChange={handleMenuChange}
+                  isReadOnly={owner.role === "reception"}
                 />
 
                 {/* Old Catalog list hidden to preserve safely */}
@@ -1295,9 +1521,344 @@ export default function AdminDashboard({ owner, onLogout }: AdminDashboardProps)
                 </div>
               </motion.div>
             )}
+
+            {/* 6. COMPLETED ORDER ARCHIVE HISTORY TAB */}
+            {activeTab === "history" && (
+              <motion.div
+                key="history"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="space-y-6"
+              >
+                <OrderHistoryView
+                  historyList={historyList}
+                  onReprintBill={setPrintingOrder}
+                />
+              </motion.div>
+            )}
+
+            {/* 7. STAFF ACCOUNTS / RECEPTION PANEL (Owner only) */}
+            {activeTab === "staff" && owner.role === "owner" && (
+              <motion.div
+                key="staff"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="space-y-6"
+              >
+                <div>
+                  <h1 className="text-2xl font-bold tracking-tight text-slate-900">Receptionist Accounts</h1>
+                  <p className="text-slate-500 text-xs mt-1">
+                    Manage accounts for the reception counter. Staff logged into these accounts can only access Orders, Tables, Menu, and Order History.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+                  {/* Left Column: Register Form */}
+                  <div className="bg-white rounded-2xl border border-slate-150 p-6 shadow-sm space-y-4">
+                    <div>
+                      <h3 className="font-bold text-sm text-slate-900">Add Reception User</h3>
+                      <p className="text-[11px] text-slate-500 mt-0.5">Register a new receptionist with limited permissions</p>
+                    </div>
+
+                    <form onSubmit={handleCreateStaff} className="space-y-4">
+                      {staffError && (
+                        <div className="p-3 bg-red-50 border border-red-150 rounded-xl text-red-600 text-xs font-medium">
+                          {staffError}
+                        </div>
+                      )}
+                      {staffSuccess && (
+                        <div className="p-3 bg-emerald-50 border border-emerald-150 rounded-xl text-emerald-700 text-xs font-medium">
+                          {staffSuccess}
+                        </div>
+                      )}
+
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                          Email Address
+                        </label>
+                        <input
+                          id="reception-email-input"
+                          type="email"
+                          required
+                          value={newStaffEmail}
+                          onChange={(e) => setNewStaffEmail(e.target.value)}
+                          placeholder="e.g. reception@cafe.com"
+                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-amber-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                          Password
+                        </label>
+                        <input
+                          id="reception-password-input"
+                          type="password"
+                          required
+                          value={newStaffPassword}
+                          onChange={(e) => setNewStaffPassword(e.target.value)}
+                          placeholder="••••••••"
+                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-amber-500"
+                        />
+                      </div>
+
+                      <button
+                        id="btn-register-receptionist"
+                        type="submit"
+                        disabled={staffLoading}
+                        className="w-full bg-slate-900 hover:bg-slate-800 text-white font-semibold py-2.5 px-4 rounded-xl text-xs cursor-pointer transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                      >
+                        {staffLoading ? (
+                          <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        ) : (
+                          <Plus className="w-3.5 h-3.5" />
+                        )}
+                        <span>Add Reception User</span>
+                      </button>
+                    </form>
+                  </div>
+
+                  {/* Right Column: Active Staff Accounts List */}
+                  <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-150 shadow-sm overflow-hidden">
+                    <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                      <div>
+                        <h3 className="font-bold text-sm text-slate-900">Active Reception Users</h3>
+                        <p className="text-[11px] text-slate-500 mt-0.5">Listed below are active restricted staff accounts</p>
+                      </div>
+                      <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded-full">
+                        {staffList.length} Active
+                      </span>
+                    </div>
+
+                    {staffLoading && staffList.length === 0 ? (
+                      <div className="p-12 text-center text-slate-400">
+                        <div className="w-6 h-6 border-2 border-slate-300 border-t-amber-500 rounded-full animate-spin mx-auto mb-2" />
+                        <span className="text-xs">Loading staff list...</span>
+                      </div>
+                    ) : staffList.length === 0 ? (
+                      <div className="p-12 text-center text-slate-400 space-y-2">
+                        <Users className="w-8 h-8 mx-auto text-slate-300" />
+                        <p className="text-xs font-semibold text-slate-500">No receptionist staff accounts created yet.</p>
+                        <p className="text-[11px] text-slate-400">Use the form on the left to add your first reception desk user.</p>
+                      </div>
+                    ) : (
+                      <div className="divide-y divide-slate-100">
+                        {staffList.map((user) => (
+                          <div key={user.id} className="p-4 px-6 flex justify-between items-center hover:bg-slate-50/50 transition-colors">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-full bg-amber-100 text-amber-800 font-bold flex items-center justify-center uppercase text-xs">
+                                {user.email.slice(0, 2)}
+                              </div>
+                              <div>
+                                <p className="text-xs font-semibold text-slate-900">{user.email}</p>
+                                <p className="text-[10px] text-slate-400">
+                                  Role: <span className="font-mono bg-slate-100 text-slate-600 px-1 py-0.5 rounded text-[9px] capitalize">{user.role}</span> • Created {new Date(user.createdAt).toLocaleDateString()}
+                                </p>
+                              </div>
+                            </div>
+
+                            <button
+                              id={`btn-delete-staff-${user.id}`}
+                              onClick={() => handleDeleteStaff(user.id)}
+                              className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg cursor-pointer transition-colors"
+                              title="Delete staff account"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {/* 8. ACTIVE BILL REQUESTS TAB */}
+            {activeTab === "bills" && (
+              <motion.div
+                key="bills"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="space-y-6"
+              >
+                <div>
+                  <h1 className="text-2xl font-bold tracking-tight text-slate-900">Seating Bill Requests</h1>
+                  <p className="text-slate-500 text-xs mt-1">
+                    Manage active guest tables waiting for their receipts, print physical invoices, and record payments.
+                  </p>
+                </div>
+
+                {(() => {
+                  const billingOrders = ordersList.filter((o) => o.billRequested && o.status !== "completed");
+                  const totalPendingAmount = billingOrders.reduce((sum, o) => sum + (o.totalPrice * 1.08), 0);
+
+                  return (
+                    <>
+                      {/* Metric Widgets */}
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div className="bg-white border border-slate-150 rounded-2xl p-6 shadow-sm flex items-center gap-4">
+                          <div className="w-12 h-12 rounded-xl bg-amber-50 flex items-center justify-center text-amber-600 shrink-0">
+                            <Receipt className="w-6 h-6" />
+                          </div>
+                          <div>
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Requests</p>
+                            <h3 className="text-2xl font-black text-slate-900 mt-0.5">{billingOrders.length} Tables</h3>
+                          </div>
+                        </div>
+
+                        <div className="bg-white border border-slate-150 rounded-2xl p-6 shadow-sm flex items-center gap-4">
+                          <div className="w-12 h-12 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0">
+                            <DollarSign className="w-6 h-6" />
+                          </div>
+                          <div>
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Pending Billing Collection</p>
+                            <h3 className="text-2xl font-black text-slate-900 mt-0.5">₹{totalPendingAmount.toFixed(0)}</h3>
+                          </div>
+                        </div>
+
+                        <div className="bg-white border border-slate-150 rounded-2xl p-6 shadow-sm flex items-center gap-4">
+                          <div className="w-12 h-12 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600 shrink-0">
+                            <Users className="w-6 h-6" />
+                          </div>
+                          <div>
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Current Occupied Tables</p>
+                            <h3 className="text-2xl font-black text-slate-900 mt-0.5">
+                              {tablesList.filter((t) => t.status === "occupied").length} / {tablesList.length}
+                            </h3>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Bill Requests Table / Cards */}
+                      {billingOrders.length === 0 ? (
+                        <div className="bg-white border border-slate-150 rounded-2xl p-16 text-center max-w-xl mx-auto space-y-4 shadow-sm mt-4">
+                          <div className="w-16 h-16 bg-slate-50 text-slate-300 rounded-full flex items-center justify-center mx-auto">
+                            <CheckCircle2 className="w-8 h-8 text-emerald-500" />
+                          </div>
+                          <div className="space-y-1">
+                            <h3 className="font-extrabold text-slate-900 text-sm">All Clear! No Pending Bill Requests</h3>
+                            <p className="text-xs text-slate-400 leading-relaxed max-w-xs mx-auto">
+                              No diners have requested their checks at this time. All active tables are currently being served or are dining happily.
+                            </p>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-4">
+                          {billingOrders.map((order) => {
+                            const minutesElapsed = Math.max(
+                              0,
+                              Math.floor((new Date().getTime() - new Date(order.updatedAt).getTime()) / 60000)
+                            );
+                            const finalPrice = order.totalPrice * 1.08;
+
+                            return (
+                              <div
+                                key={order.id}
+                                className="bg-white border border-slate-200 hover:border-amber-200 rounded-2xl p-6 shadow-sm transition-all flex flex-col justify-between"
+                              >
+                                <div>
+                                  {/* Header info */}
+                                  <div className="flex justify-between items-start pb-4 border-b border-slate-100">
+                                    <div>
+                                      <span className="text-[10px] font-mono text-slate-400 font-bold bg-slate-50 border border-slate-150 rounded-md px-1.5 py-0.5">
+                                        Ticket ID: #{order.id}
+                                      </span>
+                                      <h3 className="text-base font-black text-slate-900 mt-1.5">
+                                        {order.tableLabel || `Table ${order.tableId}`}
+                                      </h3>
+                                    </div>
+                                    <div className="text-right space-y-1">
+                                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-rose-700 bg-rose-50 border border-rose-100 px-2 py-0.5 rounded-full uppercase tracking-tight font-mono animate-pulse">
+                                        <span className="w-1 h-1 rounded-full bg-rose-600 animate-ping shrink-0" />
+                                        Check Requested
+                                      </span>
+                                      <p className="text-[10px] text-slate-400 font-medium">
+                                        Requested {minutesElapsed === 0 ? "just now" : `${minutesElapsed}m ago`}
+                                      </p>
+                                    </div>
+                                  </div>
+
+                                  {/* Order Items List */}
+                                  <div className="py-4 space-y-2.5">
+                                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Diner Consumption Summary</p>
+                                    <div className="divide-y divide-slate-50 max-h-48 overflow-y-auto pr-1">
+                                      {order.items?.map((item) => (
+                                        <div key={item.id} className="flex justify-between py-2 text-xs">
+                                          <div className="flex items-start gap-1.5 min-w-0">
+                                            <span className="font-extrabold text-slate-400 min-w-[18px]">
+                                              {item.quantity}x
+                                            </span>
+                                            <div className="truncate">
+                                              <p className="font-semibold text-slate-800 truncate">{item.name}</p>
+                                              {item.notes && (
+                                                <p className="text-[10px] text-slate-400 italic mt-0.5">"{item.notes}"</p>
+                                              )}
+                                            </div>
+                                          </div>
+                                          <span className="font-medium text-slate-600 font-mono">
+                                            ₹{(item.unitPrice * item.quantity).toFixed(0)}
+                                          </span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+
+                                  {/* Total breakdown */}
+                                  <div className="p-4 bg-slate-50 border border-slate-100 rounded-xl space-y-2 text-xs">
+                                    <div className="flex justify-between text-slate-500 font-medium">
+                                      <span>Items Subtotal</span>
+                                      <span className="font-mono">₹{order.totalPrice.toFixed(0)}</span>
+                                    </div>
+                                    <div className="flex justify-between text-slate-500 font-medium">
+                                      <span>GST + Service Charge (8%)</span>
+                                      <span className="font-mono">₹{(order.totalPrice * 0.08).toFixed(0)}</span>
+                                    </div>
+                                    <div className="flex justify-between text-slate-900 font-black text-sm pt-2 border-t border-slate-200">
+                                      <span className="uppercase tracking-tight">Net Bill Amount</span>
+                                      <span className="font-mono text-rose-600">₹{finalPrice.toFixed(0)}</span>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Actions footer */}
+                                <div className="mt-6 pt-4 border-t border-slate-100 flex gap-3">
+                                  <button
+                                    id={`btn-bills-print-${order.id}`}
+                                    onClick={() => setPrintingOrder(order)}
+                                    className="flex-1 inline-flex items-center justify-center gap-1.5 py-3 px-4 bg-white hover:bg-slate-50 text-slate-700 font-bold border border-slate-200 rounded-xl text-xs cursor-pointer transition-all active:scale-[0.98]"
+                                  >
+                                    <Printer className="w-4 h-4" />
+                                    <span>Print Bill Slip</span>
+                                  </button>
+                                  <button
+                                    id={`btn-bills-settle-${order.id}`}
+                                    onClick={() => setSettleOrderId(order.id)}
+                                    className="flex-1 inline-flex items-center justify-center gap-1.5 py-3 px-4 bg-rose-600 hover:bg-rose-700 text-white font-bold border border-rose-700 rounded-xl text-xs cursor-pointer shadow-md shadow-rose-600/10 transition-all active:scale-[0.98]"
+                                  >
+                                    <CreditCard className="w-4 h-4" />
+                                    <span>Settle & Pay</span>
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
+              </motion.div>
+            )}
+
+
           </AnimatePresence>
-        )}
-      </main>
+        </>
+      )}
+    </main>
     </div>
 
       {/* MODAL 1: ADD TABLE MODAL */}
@@ -1334,7 +1895,10 @@ export default function AdminDashboard({ owner, onLogout }: AdminDashboardProps)
                   max="20"
                   required
                   value={newTableCapacity}
-                  onChange={(e) => setNewTableCapacity(parseInt(e.target.value))}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setNewTableCapacity(val === "" ? "" : parseInt(val));
+                  }}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-amber-500"
                 />
               </div>
@@ -1495,7 +2059,7 @@ export default function AdminDashboard({ owner, onLogout }: AdminDashboardProps)
               <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
                 <img
                   src={`https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(
-                    `${window.location.origin}?table=${activeQrTable.id}`
+                    `${publicUrl}?table=${activeQrTable.id}`
                   )}`}
                   alt={`${activeQrTable.label} QR Code`}
                   referrerPolicy="no-referrer"
@@ -1508,9 +2072,67 @@ export default function AdminDashboard({ owner, onLogout }: AdminDashboardProps)
                   Guests can scan this QR code using any smartphone camera to open the menu and order instantly.
                 </p>
                 <div className="bg-slate-50 border border-slate-200 rounded-xl p-2.5 select-all text-[10px] font-mono break-all text-slate-600">
-                  {`${window.location.origin}?table=${activeQrTable.id}`}
+                  {`${publicUrl}?table=${activeQrTable.id}`}
                 </div>
               </div>
+
+              {activeQrTable.label.toLowerCase().includes("parcel") && (() => {
+                const activeOrdersForQrTable = ordersList.filter(o => o.tableId === activeQrTable.id && o.status !== "completed");
+                return (
+                  <div className="w-full border-t border-slate-100 pt-5 mt-2 space-y-3 text-left">
+                    <div className="flex items-center gap-1.5 text-amber-600 font-bold text-xs uppercase tracking-wider">
+                      <span className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                      </span>
+                      Active Calling Tokens:
+                    </div>
+                    {activeOrdersForQrTable.length === 0 ? (
+                      <p className="text-xs text-slate-400 italic">No active parcel/takeaway orders currently.</p>
+                    ) : (
+                      <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                        {activeOrdersForQrTable.map((order) => {
+                          const handleCallTokenVoice = (e: React.MouseEvent) => {
+                            e.stopPropagation();
+                            if (!order.tokenNumber) return;
+                            const utterance = new SpeechSynthesisUtterance(
+                              `Token number ${order.tokenNumber}, please collect your parcel!`
+                            );
+                            utterance.lang = "en-IN";
+                            window.speechSynthesis.speak(utterance);
+                          };
+                          return (
+                            <div key={order.id} className="flex items-center justify-between bg-slate-50 border border-slate-100 p-2.5 rounded-xl shadow-sm">
+                              <div className="flex items-center gap-2.5">
+                                <span className="text-sm font-black text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                                  #{order.tokenNumber || order.id}
+                                </span>
+                                <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${
+                                  order.status === "ready" 
+                                    ? "bg-emerald-50 text-emerald-600 border border-emerald-100" 
+                                    : "bg-amber-50 text-amber-600 border border-amber-100"
+                                }`}>
+                                  {order.status}
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={handleCallTokenVoice}
+                                className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 active:scale-95 text-slate-950 font-bold text-[10px] rounded-lg transition-all flex items-center gap-1 cursor-pointer select-none"
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15.536 8.464a5 5 0 010 7.072M18.364 5.636a9 9 0 010 12.728M12 18.75V5.25L7.75 9.5H4.5v5h3.25L12 18.75z" />
+                                </svg>
+                                Call Customer
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
 
               <div className="flex gap-2 w-full pt-2">
                 <button
@@ -1534,9 +2156,9 @@ export default function AdminDashboard({ owner, onLogout }: AdminDashboardProps)
                               <h1>${activeQrTable.label}</h1>
                               <p>Scan to Browse Menu & Order</p>
                               <img class="qr" src="https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(
-                                `${window.location.origin}?table=${activeQrTable.id}`
+                                `${publicUrl}?table=${activeQrTable.id}`
                               )}" />
-                              <div style="font-size: 10px; font-family: monospace; color: #94a3b8;">Powered by Classmate Cafe</div>
+                              <div style="font-size: 10px; font-family: monospace; color: #94a3b8;">Powered by cafe Software</div>
                             </div>
                             <script>
                               window.onload = function() { window.print(); }
@@ -1679,7 +2301,7 @@ export default function AdminDashboard({ owner, onLogout }: AdminDashboardProps)
                 
                 {/* Branding */}
                 <div className="text-center pt-2 pb-3 space-y-0.5">
-                  <h4 className="font-black text-xs tracking-widest text-slate-900 uppercase">Classmate Cafe</h4>
+                  <h4 className="font-black text-xs tracking-widest text-slate-900 uppercase">cafe Software</h4>
                   <p className="text-[8px] text-slate-500">College Campus, Food Court Zone</p>
                   <p className="text-[8px] text-slate-500">Tel: +91 98765 43210</p>
                   <p className="text-[8px] text-slate-500">GSTIN: 27AAAAA1111A1Z1</p>
@@ -1743,7 +2365,7 @@ export default function AdminDashboard({ owner, onLogout }: AdminDashboardProps)
 
                 <div className="text-center text-[8px] text-slate-500 mt-4 leading-normal space-y-0.5">
                   <p className="font-bold">Thank you for dining with us!</p>
-                  <p>Classmate Cafe • Fuel for Minds</p>
+                  <p>cafe Software • Fuel for Minds</p>
                   <p>Share your feedback via the table QR!</p>
                 </div>
 

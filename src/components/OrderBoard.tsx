@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Order, OrderItem } from "../types.ts";
-import { Clock, Play, CheckCircle2, Check, ArrowRight, ClipboardList, Utensils } from "lucide-react";
+import { Clock, Play, CheckCircle2, Check, ArrowRight, ClipboardList, Utensils, Volume2 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
 interface OrderBoardProps {
@@ -36,6 +36,16 @@ const OrderCard: React.FC<{
     const timer = setInterval(calculateElapsed, 15000); // refresh every 15s
     return () => clearInterval(timer);
   }, [order.createdAt]);
+
+  const handleCallVoice = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!order.tokenNumber) return;
+    const utterance = new SpeechSynthesisUtterance(
+      `Token number ${order.tokenNumber}, please collect your order!`
+    );
+    utterance.lang = "en-IN"; // Indian accent English for local cafe
+    window.speechSynthesis.speak(utterance);
+  };
 
   const getActionDetails = () => {
     switch (order.status) {
@@ -75,16 +85,35 @@ const OrderCard: React.FC<{
       className="bg-white p-4.5 rounded-2xl border border-slate-150 shadow-sm hover:shadow-md transition-shadow space-y-4"
     >
       <div className="flex justify-between items-start">
-        <div>
-          <span className="text-xs font-bold text-slate-900 bg-slate-100 px-2 py-0.5 rounded-md">
-            {order.tableLabel}
-          </span>
-          <span className="text-[10px] font-mono text-slate-400 block mt-1">Ticket: #{order.id}</span>
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-xs font-extrabold text-slate-900 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
+              {order.tableLabel}
+            </span>
+            {order.tokenNumber && (
+              <span className="text-[11px] font-black text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md flex items-center gap-0.5">
+                Token #{order.tokenNumber}
+              </span>
+            )}
+          </div>
+          <span className="text-[10px] font-mono text-slate-400 block">Ticket: #{order.id}</span>
         </div>
         
-        <div className="flex items-center gap-1.5 text-[10px] font-mono font-medium text-slate-500">
-          <Clock className="w-3 h-3 text-slate-400" />
-          <span>{elapsed}</span>
+        <div className="flex flex-col items-end gap-1.5 shrink-0">
+          <div className="flex items-center gap-1.5 text-[10px] font-mono font-medium text-slate-500">
+            <Clock className="w-3 h-3 text-slate-400" />
+            <span>{elapsed}</span>
+          </div>
+          {order.tokenNumber && (
+            <button
+              onClick={handleCallVoice}
+              title="Voice Call Customer Token"
+              className="px-2 py-1 bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-slate-950 rounded-lg text-[9px] font-bold flex items-center gap-1 transition-all active:scale-95 cursor-pointer shadow-xs select-none"
+            >
+              <Volume2 className="w-3 h-3" />
+              <span>Call Token</span>
+            </button>
+          )}
         </div>
       </div>
 

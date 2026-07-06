@@ -391,9 +391,9 @@ export default function CustomerView({ tableId: propTableId }: CustomerViewProps
   }
 
   return (
-    <div className="min-h-screen bg-slate-900 flex justify-center items-center p-0 sm:p-6 font-sans text-slate-800">
+    <div className="h-[100dvh] sm:min-h-screen bg-slate-900 flex justify-center items-center p-0 sm:p-6 font-sans text-slate-800 overflow-hidden sm:overflow-visible">
       {/* Smartphone Mockup Frame */}
-      <div className="w-full max-w-md h-screen sm:h-[840px] sm:max-h-[92vh] bg-slate-50 flex flex-col rounded-none sm:rounded-[40px] shadow-2xl overflow-hidden relative border border-slate-200/50 sm:border-slate-800 sm:ring-8 sm:ring-slate-950">
+      <div className="w-full max-w-md h-full sm:h-[840px] sm:max-h-[92vh] bg-slate-50 flex flex-col rounded-none sm:rounded-[40px] shadow-2xl overflow-hidden relative border border-slate-200/50 sm:border-slate-800 sm:ring-8 sm:ring-slate-950">
         
         {/* Food Delivery & Emoji Rain Animation Overlay */}
         <AnimatePresence>
@@ -507,7 +507,7 @@ export default function CustomerView({ tableId: propTableId }: CustomerViewProps
             </div>
             <div>
               <h1 className="text-base font-extrabold text-slate-900 tracking-tight leading-none">
-                Classmate Cafe
+                cafe Software
               </h1>
               <p className="text-[10px] text-amber-600 font-extrabold tracking-wider mt-1.5 uppercase">
                 {table?.label || `Table ${activeTableId}`}

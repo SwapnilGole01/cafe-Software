@@ -41,6 +41,7 @@ export const orders = pgTable("orders", {
   totalPrice: doublePrecision("total_price").default(0).notNull(),
   billRequested: boolean("bill_requested").default(false).notNull(),
   paymentMethod: text("payment_method").default("cash").notNull(), // 'cash', 'online'
+  tokenNumber: integer("token_number"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

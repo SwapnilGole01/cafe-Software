@@ -11,6 +11,7 @@ interface TableGridProps {
   onUpdateOrderStatus?: (orderId: number, status: Order["status"]) => void;
   onShowQrCode?: (table: Table) => void;
   onPrintOrderBill?: (order: Order) => void;
+  publicUrl?: string;
 }
 
 export const TableGrid: React.FC<TableGridProps> = ({
@@ -20,8 +21,21 @@ export const TableGrid: React.FC<TableGridProps> = ({
   onUpdateOrderStatus,
   onShowQrCode,
   onPrintOrderBill,
+  publicUrl,
 }) => {
   const [selectedTable, setSelectedTable] = useState<Table | null>(null);
+
+  const getActiveBaseUrl = () => {
+    if (publicUrl) return publicUrl;
+    const stored = localStorage.getItem("cafe_public_url");
+    if (stored) return stored;
+    const origin = window.location.origin;
+    if (origin.includes("ais-dev-")) {
+      return origin.replace("ais-dev-", "ais-pre-");
+    }
+    return origin;
+  };
+  const activeBaseUrl = getActiveBaseUrl();
 
   // States for owner edit order flow
   const [menuItemsList, setMenuItemsList] = useState<MenuItem[]>([]);
@@ -136,7 +150,7 @@ export const TableGrid: React.FC<TableGridProps> = ({
   return (
     <div className="space-y-6 font-sans relative">
       <div>
-        <h2 className="text-xl font-bold tracking-tight text-slate-900">Classmate Cafe Table Layout</h2>
+        <h2 className="text-xl font-bold tracking-tight text-slate-900">cafe Software Table Layout</h2>
         <p className="text-slate-500 text-xs mt-1">Real-time occupancy status and active orders overview.</p>
       </div>
 
@@ -287,7 +301,7 @@ export const TableGrid: React.FC<TableGridProps> = ({
                     <div className="bg-slate-50 p-1.5 rounded-lg border border-slate-100 shrink-0">
                       <img
                         src={`https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(
-                          `${window.location.origin}?table=${selectedTable.id}`
+                          `${activeBaseUrl}?table=${selectedTable.id}`
                         )}`}
                         alt="Table QR Code"
                         className="w-16 h-16"
@@ -308,7 +322,7 @@ export const TableGrid: React.FC<TableGridProps> = ({
                         </button>
                         <button
                           onClick={() => {
-                            navigator.clipboard.writeText(`${window.location.origin}?table=${selectedTable.id}`);
+                            navigator.clipboard.writeText(`${activeBaseUrl}?table=${selectedTable.id}`);
                             alert(`Copied ordering link to clipboard for ${selectedTable.label}!`);
                           }}
                           className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[10px] rounded-md border border-slate-200 transition-all cursor-pointer select-none"
@@ -318,6 +332,64 @@ export const TableGrid: React.FC<TableGridProps> = ({
                       </div>
                     </div>
                   </div>
+
+                  {selectedTable.label.toLowerCase().includes("parcel") && (() => {
+                    const activeOrders = orders.filter((o) => o.tableId === selectedTable.id && o.status !== "completed");
+                    return (
+                      <div className="mt-3 pt-3 border-t border-slate-250/60 space-y-2">
+                        <div className="flex items-center gap-1.5 text-amber-600 font-bold text-[10px] uppercase tracking-wider">
+                          <span className="relative flex h-1.5 w-1.5">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-amber-500"></span>
+                          </span>
+                          Active Parcel Tokens for Calling:
+                        </div>
+                        {activeOrders.length === 0 ? (
+                          <p className="text-[10px] text-slate-400 italic">No active parcel orders currently.</p>
+                        ) : (
+                          <div className="grid grid-cols-1 gap-1.5">
+                            {activeOrders.map((order) => {
+                              const handleCallTokenVoice = (e: React.MouseEvent) => {
+                                e.stopPropagation();
+                                if (!order.tokenNumber) return;
+                                const utterance = new SpeechSynthesisUtterance(
+                                  `Token number ${order.tokenNumber}, please collect your parcel!`
+                                );
+                                utterance.lang = "en-IN";
+                                window.speechSynthesis.speak(utterance);
+                              };
+                              return (
+                                <div key={order.id} className="flex items-center justify-between bg-white border border-slate-100 px-2.5 py-1.5 rounded-xl shadow-sm">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[10px] font-black text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                                      #{order.tokenNumber || order.id}
+                                    </span>
+                                    <span className={`text-[8px] px-1.5 py-0.5 rounded-full font-bold uppercase ${
+                                      order.status === "ready" 
+                                        ? "bg-emerald-50 text-emerald-600 border border-emerald-100" 
+                                        : "bg-amber-50 text-amber-600 border border-amber-100"
+                                    }`}>
+                                      {order.status}
+                                    </span>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={handleCallTokenVoice}
+                                    className="px-2 py-1 bg-amber-500 hover:bg-amber-600 active:scale-95 text-slate-950 font-bold text-[8px] rounded-md transition-all flex items-center gap-1 cursor-pointer select-none"
+                                  >
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15.536 8.464a5 5 0 010 7.072M18.364 5.636a9 9 0 010 12.728M12 18.75V5.25L7.75 9.5H4.5v5h3.25L12 18.75z" />
+                                    </svg>
+                                    Call Token
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 <div className="flex items-center justify-between">
@@ -343,8 +415,13 @@ export const TableGrid: React.FC<TableGridProps> = ({
                         <div key={order.id} className="border border-slate-200 rounded-2xl p-4 bg-slate-50/50 space-y-4">
                           <div className="flex justify-between items-center">
                             <div>
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-2 flex-wrap">
                                 <span className="text-[10px] font-mono text-slate-400 font-bold">Ticket ID: #{order.id}</span>
+                                {order.tokenNumber && (
+                                  <span className="px-1.5 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 rounded text-[9px] font-extrabold">
+                                    Token #{order.tokenNumber}
+                                  </span>
+                                )}
                                 {order.billRequested && (
                                   <span className="px-2 py-0.5 bg-red-500 text-white rounded text-[8px] font-bold uppercase tracking-wider animate-pulse">
                                     Bill Requested

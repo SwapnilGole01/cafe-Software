@@ -33,7 +33,7 @@ export const fullMenuData: MenuSeedItem[] = [
     description: "Spicy stir-fried crispy paneer cubes tossed with fresh peppers in a sharp soy-chilli glaze.",
     price: 190.00,
     category: "Appetizers",
-    imageUrl: "https://images.unsplash.com/photo-1601050690597-df056fb4ce78?auto=format&fit=crop&w=600&q=80",
+    imageUrl: "https://images.unsplash.com/photo-1565557623262-b51c2513a641?auto=format&fit=crop&w=600&q=80",
     dietType: "veg",
     isAvailable: true
   },
@@ -650,7 +650,7 @@ export const fullMenuData: MenuSeedItem[] = [
     description: "Extra slice or shred of premium cheddar or mozzarella cheese.",
     price: 30.00,
     category: "Add-ons",
-    imageUrl: "https://images.unsplash.com/photo-1528256846577-6ef70072d9a9?auto=format&fit=crop&w=600&q=80",
+    imageUrl: "https://images.unsplash.com/photo-1552763440-4793eb3dedec?auto=format&fit=crop&w=600&q=80",
     dietType: "veg",
     isAvailable: true
   },

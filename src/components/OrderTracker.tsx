@@ -88,6 +88,14 @@ export default function OrderTracker({
           </span>
         </div>
 
+        {order.tokenNumber && (
+          <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 mb-6 text-center">
+            <p className="text-[10px] uppercase font-bold tracking-wider text-amber-400">Your Calling Token Number</p>
+            <p className="text-3xl font-black text-amber-500 mt-1">#{order.tokenNumber}</p>
+            <p className="text-[10px] text-slate-400 mt-1">Please wait for the kitchen to call your token number!</p>
+          </div>
+        )}
+
         {/* Live Stepper component */}
         <div className="relative flex justify-between items-center px-4 mb-6">
           {/* Stepper Progress bar */}
