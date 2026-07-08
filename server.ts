@@ -69,12 +69,11 @@ async function checkTableVerificationAsync(req: express.Request, tableId: number
   return true;
 }
 
-export let appInstance: any = null;
+export const app = express();
+export let appInstance: any = app;
 export let ioInstance: any = null;
 
 async function startServer() {
-  const app = express();
-  appInstance = app;
   const PORT = 3000;
 
   app.use(express.json());
@@ -2008,7 +2007,7 @@ async function startServer() {
     });
   }
 
-  if (process.env.NODE_ENV !== "test") {
+  if (process.env.NODE_ENV !== "test" && !process.env.VERCEL) {
     httpServer.listen(PORT, "0.0.0.0", () => {
       console.log(`Server running on http://localhost:${PORT}`);
     });
