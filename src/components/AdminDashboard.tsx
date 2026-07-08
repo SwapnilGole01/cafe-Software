@@ -751,7 +751,7 @@ export default function AdminDashboard({ owner, onLogout }: AdminDashboardProps)
       <!DOCTYPE html>
       <html>
       <head>
-        <title>DEV STUDIO - Receipt #${order.id}</title>
+        <title>AS DEV STUDIO - Receipt #${order.id}</title>
         <style>
           @page {
             size: 80mm auto;
@@ -845,7 +845,7 @@ export default function AdminDashboard({ owner, onLogout }: AdminDashboardProps)
       </head>
       <body>
         <div class="header">
-          <h1>DEV STUDIO</h1>
+          <h1>AS DEV STUDIO</h1>
           <p>College Campus, Food Court Zone</p>
           <p>Tel: +91 98765 43210</p>
           <p>GSTIN: 27AAAAA1111A1Z1</p>
@@ -905,7 +905,7 @@ export default function AdminDashboard({ owner, onLogout }: AdminDashboardProps)
 
         <div class="footer">
           <p>Thank you for dining with us!</p>
-          <p>DEV STUDIO • Fuel for Minds</p>
+          <p>AS DEV STUDIO • Fuel for Minds</p>
           <p>Share your feedback via the table QR!</p>
         </div>
 
@@ -976,7 +976,7 @@ export default function AdminDashboard({ owner, onLogout }: AdminDashboardProps)
             <div className="w-8 h-8 bg-amber-500 rounded-lg flex items-center justify-center shrink-0">
               <Coffee className="w-5 h-5 text-slate-900" />
             </div>
-            <span className="font-bold text-white tracking-tight hidden lg:inline truncate">DEV STUDIO</span>
+            <span className="font-bold text-white tracking-tight hidden lg:inline truncate">AS DEV STUDIO</span>
           </div>
 
           <nav className="p-2 lg:p-4 space-y-1">
@@ -2345,7 +2345,7 @@ export default function AdminDashboard({ owner, onLogout }: AdminDashboardProps)
                               <img class="qr" src="https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(
                                 `${publicUrl}?table=${activeQrTable.id}${activeQrTable.token ? `&token=${activeQrTable.token}` : ""}&scan=true`
                               )}" />
-                              <div style="font-size: 10px; font-family: monospace; color: #94a3b8;">Powered by DEV STUDIO</div>
+                              <div style="font-size: 10px; font-family: monospace; color: #94a3b8;">Powered by AS DEV STUDIO</div>
                             </div>
                             <script>
                               window.onload = function() { window.print(); }
@@ -2488,7 +2488,7 @@ export default function AdminDashboard({ owner, onLogout }: AdminDashboardProps)
                 
                 {/* Branding */}
                 <div className="text-center pt-2 pb-3 space-y-0.5">
-                  <h4 className="font-black text-xs tracking-widest text-slate-900 uppercase">DEV STUDIO</h4>
+                  <h4 className="font-black text-xs tracking-widest text-slate-900 uppercase">AS DEV STUDIO</h4>
                   <p className="text-[8px] text-slate-500">College Campus, Food Court Zone</p>
                   <p className="text-[8px] text-slate-500">Tel: +91 98765 43210</p>
                   <p className="text-[8px] text-slate-500">GSTIN: 27AAAAA1111A1Z1</p>
@@ -2552,7 +2552,7 @@ export default function AdminDashboard({ owner, onLogout }: AdminDashboardProps)
 
                 <div className="text-center text-[8px] text-slate-500 mt-4 leading-normal space-y-0.5">
                   <p className="font-bold">Thank you for dining with us!</p>
-                  <p>DEV STUDIO • Fuel for Minds</p>
+                  <p>AS DEV STUDIO • Fuel for Minds</p>
                   <p>Share your feedback via the table QR!</p>
                 </div>
 

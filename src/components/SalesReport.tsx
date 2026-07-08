@@ -114,7 +114,7 @@ export const SalesReport: React.FC = () => {
       csvContent += formattedCells.join(",") + "\n";
     };
 
-    addRow(["DEV STUDIO - SALES & REVENUE REPORT"]);
+    addRow(["AS DEV STUDIO - SALES & REVENUE REPORT"]);
     addRow([`Report Period: ${rangeType.toUpperCase()}`]);
     addRow([`Generated At: ${new Date().toLocaleString()}`]);
     addRow([]);
@@ -176,7 +176,7 @@ export const SalesReport: React.FC = () => {
       return;
     }
 
-    const title = `DEV STUDIO Sales Report - ${rangeType.toUpperCase()}`;
+    const title = `AS DEV STUDIO Sales Report - ${rangeType.toUpperCase()}`;
     const dateStr = new Date().toLocaleString();
 
     const topSellingItemsHTML = report.topSellingItems.length === 0
@@ -370,7 +370,7 @@ export const SalesReport: React.FC = () => {
         <body>
           <div class="header">
             <div>
-              <h1>DEV STUDIO</h1>
+              <h1>AS DEV STUDIO</h1>
               <p>Revenue & Sales Performance Statement</p>
             </div>
             <div class="meta-info">
@@ -457,8 +457,8 @@ export const SalesReport: React.FC = () => {
           </div>
 
           <div class="footer">
-            <p>DEV STUDIO Restaurant Management Platform • Confidential Business Analytics</p>
-            <p>© ${new Date().getFullYear()} DEV STUDIO. All rights reserved.</p>
+            <p>AS DEV STUDIO Restaurant Management Platform • Confidential Business Analytics</p>
+            <p>© ${new Date().getFullYear()} AS DEV STUDIO. All rights reserved.</p>
           </div>
 
           <script>

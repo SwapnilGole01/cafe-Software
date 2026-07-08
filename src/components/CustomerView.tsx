@@ -537,7 +537,7 @@ export default function CustomerView({ tableId: propTableId }: CustomerViewProps
             </div>
             <div>
               <h1 className="text-base font-extrabold text-slate-900 tracking-tight leading-none">
-                DEV STUDIO
+                AS DEV STUDIO
               </h1>
               <p className="text-[10px] text-amber-600 font-extrabold tracking-wider mt-1.5 uppercase">
                 {table?.label || `Table ${activeTableId}`}
