@@ -60,6 +60,7 @@ export default function AdminDashboard({ owner, onLogout }: AdminDashboardProps)
     owner.role === "reception" ? "orders" : "overview"
   );
   const [toasts, setToasts] = useState<AdminToast[]>([]);
+  const [isAudioSuspended, setIsAudioSuspended] = useState(false);
   const [tablesList, setTablesList] = useState<Table[]>([]);
   const [menuList, setMenuList] = useState<MenuItem[]>([]);
   const [ordersList, setOrdersList] = useState<Order[]>([]);
@@ -219,8 +220,14 @@ export default function AdminDashboard({ owner, onLogout }: AdminDashboardProps)
         audioCtxRef.current = new AudioContextClass();
         (window as any).globalAudioContext = audioCtxRef.current;
       }
-      if (audioCtxRef.current && audioCtxRef.current.state === "suspended") {
-        audioCtxRef.current.resume().catch(() => {});
+      if (audioCtxRef.current) {
+        if (audioCtxRef.current.state === "suspended") {
+          audioCtxRef.current.resume().then(() => {
+            setIsAudioSuspended(false);
+          }).catch(() => {});
+        } else {
+          setIsAudioSuspended(false);
+        }
       }
       return audioCtxRef.current;
     } catch (err) {
@@ -230,16 +237,32 @@ export default function AdminDashboard({ owner, onLogout }: AdminDashboardProps)
   };
 
   useEffect(() => {
+    const checkState = () => {
+      if (audioCtxRef.current) {
+        setIsAudioSuspended(audioCtxRef.current.state === "suspended");
+      } else {
+        setIsAudioSuspended(true);
+      }
+    };
     const resumeAudio = () => {
-      initAudioContext();
+      const ctx = initAudioContext();
+      if (ctx) {
+        ctx.resume().then(checkState).catch(checkState);
+      }
     };
     window.addEventListener("click", resumeAudio);
     window.addEventListener("pointerdown", resumeAudio);
     window.addEventListener("keydown", resumeAudio);
+    
+    // Check initially and periodically
+    checkState();
+    const interval = setInterval(checkState, 2000);
+
     return () => {
       window.removeEventListener("click", resumeAudio);
       window.removeEventListener("pointerdown", resumeAudio);
       window.removeEventListener("keydown", resumeAudio);
+      clearInterval(interval);
     };
   }, []);
 
@@ -479,7 +502,9 @@ export default function AdminDashboard({ owner, onLogout }: AdminDashboardProps)
     fetchAllData();
 
     // Set up Socket.io client
-    const socket = io();
+    const socket = io({
+      transports: ["polling", "websocket"]
+    });
 
     socket.on("order:new", (order: Order) => {
       setOrdersList((prev) => {
@@ -1040,11 +1065,53 @@ export default function AdminDashboard({ owner, onLogout }: AdminDashboardProps)
             {activeTab === "bills" && "Active Seating Bill Requests"}
           </h2>
           <div className="flex items-center gap-3">
-            <div className="hidden items-center gap-2 text-xs font-medium text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-100">
+            {/* Live Order Sound Widget */}
+            <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 shadow-xs">
+              <button
+                onClick={cycleSound}
+                className="flex items-center gap-1.5 px-1.5 py-1 hover:bg-slate-200/50 rounded-lg text-xs font-bold text-slate-700 transition-all cursor-pointer"
+                title="Cycle sound alert style or mute"
+              >
+                {alertSoundType === "muted" && <VolumeX className="w-4 h-4 text-rose-500" />}
+                {alertSoundType === "standard" && <Volume1 className="w-4 h-4 text-amber-500 animate-pulse" />}
+                {alertSoundType === "loud" && <Volume2 className="w-4 h-4 text-emerald-600 animate-bounce" />}
+                <span className="hidden md:inline uppercase text-[10px] tracking-wider text-slate-600">
+                  Alert: {alertSoundType}
+                </span>
+              </button>
+              <span className="w-[1px] h-3.5 bg-slate-200"></span>
+              {isAudioSuspended && alertSoundType !== "muted" ? (
+                <button
+                  onClick={() => {
+                    const ctx = initAudioContext();
+                    if (ctx) {
+                      ctx.resume().then(() => {
+                        setIsAudioSuspended(false);
+                        playChime(true);
+                      });
+                    }
+                  }}
+                  className="px-2 py-1 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-lg text-[10px] font-black uppercase tracking-wider animate-pulse transition-all cursor-pointer flex items-center gap-1"
+                  title="Your browser blocked autoplay audio. Click here to authorize notification sounds."
+                >
+                  ⚠️ Unmute
+                </button>
+              ) : (
+                <button
+                  onClick={() => playChime(true)}
+                  className="px-2 py-1 hover:bg-slate-200/50 rounded-lg text-[10px] font-black uppercase tracking-wider text-amber-600 hover:text-amber-700 transition-all cursor-pointer"
+                  title="Play a test kitchen alert sound"
+                >
+                  Test Sound
+                </button>
+              )}
+            </div>
+
+            <div className="hidden">
               <span className="w-2 h-2 bg-emerald-500 rounded-full"></span>
               Node.js API Online
             </div>
-            <div className="hidden items-center gap-2 text-xs font-medium text-blue-600 bg-blue-50 px-2.5 py-1 rounded-full border border-blue-100">
+            <div className="hidden">
               <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
               PostgreSQL Connected
             </div>
@@ -2548,11 +2615,11 @@ export default function AdminDashboard({ owner, onLogout }: AdminDashboardProps)
                 </div>
                 <div className="flex-1 min-w-0">
                   <h4 className="text-xs font-bold text-white truncate">
-                    {isBill ? "Bill Requested! 🧾" : "New Kitchen Order!"}
+                    {isBill ? "Bill Requested! 🧾" : `New Order #${toast.orderId}! 🛎️`}
                   </h4>
                   <p className="text-[10px] text-slate-300 font-medium mt-0.5 truncate">
                     {isBill 
-                      ? `${toast.tableLabel} • Est. ₹${((toast.totalPrice || 0) * 1.08).toFixed(0)}`
+                      ? `${toast.tableLabel} • Order #${toast.orderId} • Est. ₹${((toast.totalPrice || 0) * 1.08).toFixed(0)}`
                       : `${toast.tableLabel} • ${toast.itemCount} ${toast.itemCount === 1 ? "item" : "items"}`
                     }
                   </p>

@@ -189,7 +189,7 @@ export const OrderBoard: React.FC<OrderBoardProps> = ({
 
   return (
     <div className="space-y-6 font-sans">
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h2 className="text-xl font-bold tracking-tight text-slate-900">Live Orders Pipeline</h2>
           <p className="text-slate-500 text-xs mt-1">
@@ -197,7 +197,15 @@ export const OrderBoard: React.FC<OrderBoardProps> = ({
           </p>
         </div>
 
-
+        <div className="flex items-center gap-2 self-start sm:self-auto bg-slate-100/80 border border-slate-200 rounded-xl px-3 py-1.5">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+          </span>
+          <span className="text-[10px] font-bold text-slate-600 uppercase tracking-wider">
+            Live alert audio active
+          </span>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

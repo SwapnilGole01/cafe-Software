@@ -1811,6 +1811,7 @@ async function startServer() {
           totalPrice: orders.totalPrice,
           paymentMethod: orders.paymentMethod,
           billRequested: orders.billRequested,
+          tokenNumber: orders.tokenNumber,
           createdAt: orders.createdAt,
           updatedAt: orders.updatedAt,
         })
@@ -1868,6 +1869,7 @@ async function startServer() {
           status: orders.status,
           totalPrice: orders.totalPrice,
           paymentMethod: orders.paymentMethod,
+          tokenNumber: orders.tokenNumber,
         })
         .from(orders)
         .innerJoin(tables, eq(orders.tableId, tables.id))

@@ -155,7 +155,9 @@ export default function CustomerView({ tableId: propTableId }: CustomerViewProps
     loadData();
 
     // Set up Socket.io client
-    const socket = io();
+    const socket = io({
+      transports: ["polling", "websocket"]
+    });
 
     socket.emit("join-table", activeTableId);
 
