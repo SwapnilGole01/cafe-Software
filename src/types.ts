@@ -4,6 +4,7 @@ export interface Table {
   capacity: number;
   status: "available" | "occupied" | "reserved";
   updatedAt: string;
+  token?: string;
 }
 
 export interface MenuItem {
@@ -47,6 +48,7 @@ export interface Feedback {
   orderId: number;
   rating: number;
   comment: string | null;
+  customerName?: string | null;
   createdAt: string;
   tableLabel?: string;
 }

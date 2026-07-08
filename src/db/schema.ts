@@ -17,6 +17,7 @@ export const tables = pgTable("tables", {
   label: text("label").notNull().unique(), // e.g., "Table 1", "Window Booth"
   capacity: integer("capacity").notNull(),
   status: text("status").default("available").notNull(), // 'available', 'occupied', 'reserved'
+  sessionToken: text("session_token"), // dynamic token generated on fresh scan
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
@@ -62,6 +63,7 @@ export const feedback = pgTable("feedback", {
   orderId: integer("order_id").references(() => orders.id, { onDelete: "cascade" }).notNull(),
   rating: integer("rating").notNull(), // 1 to 5 stars
   comment: text("comment"),
+  customerName: text("customer_name"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

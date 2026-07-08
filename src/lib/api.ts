@@ -18,17 +18,43 @@ async function apiFetch<T>(url: string, options: RequestInit = {}): Promise<T> {
   if (authToken) {
     headers.set("Authorization", `Bearer ${authToken}`);
   }
+  const tableToken = localStorage.getItem("cafe_table_token");
+  if (tableToken) {
+    headers.set("X-Table-Token", tableToken);
+  }
+  const sessionToken = localStorage.getItem("cafe_session_token");
+  if (sessionToken) {
+    headers.set("X-Session-Token", sessionToken);
+  }
   if (options.body && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
 
   const response = await fetch(url, { ...options, headers });
-  if (!response.ok) {
-    const errData = await response.json().catch(() => ({}));
-    throw new Error(errData.error || `HTTP error ${response.status}`);
+  
+  const contentType = response.headers.get("Content-Type") || "";
+  if (contentType.includes("text/html")) {
+    throw new Error(`Expected JSON but received HTML from the server for route: ${url}. The server or endpoint may be temporarily starting up or unavailable.`);
   }
 
-  return response.json() as Promise<T>;
+  if (!response.ok) {
+    let errMsg = `HTTP error ${response.status}`;
+    try {
+      const errData = await response.json();
+      if (errData && errData.error) {
+        errMsg = errData.error;
+      }
+    } catch (e) {
+      // Not a JSON error body
+    }
+    throw new Error(errMsg);
+  }
+
+  try {
+    return await response.json() as T;
+  } catch (err) {
+    throw new Error(`Failed to parse JSON response from ${url}: ${(err as Error).message}`);
+  }
 }
 
 export const api = {
@@ -69,8 +95,9 @@ export const api = {
     return Object.values(data).flat() as MenuItem[];
   },
 
-  async getTableStatus(tableId: number): Promise<{ table: Table; activeOrder: Order | null }> {
-    return apiFetch<{ table: Table; activeOrder: Order | null }>(`/api/table/${tableId}`);
+  async getTableStatus(tableId: number, scan: boolean = false): Promise<{ table: Table; activeOrder: Order | null; sessionToken?: string }> {
+    const url = `/api/table/${tableId}${scan ? "?scan=true" : ""}`;
+    return apiFetch<{ table: Table; activeOrder: Order | null; sessionToken?: string }>(url);
   },
 
   async placeOrder(tableId: number, items: { menuItemId: number; quantity: number; notes: string }[]): Promise<{ orderId: number; totalPrice: number }> {
@@ -87,10 +114,10 @@ export const api = {
     });
   },
 
-  async submitFeedback(orderId: number, rating: number, comment: string): Promise<{ message: string }> {
+  async submitFeedback(orderId: number, rating: number, comment: string, customerName?: string): Promise<{ message: string }> {
     return apiFetch<{ message: string }>("/api/feedback", {
       method: "POST",
-      body: JSON.stringify({ orderId, rating, comment }),
+      body: JSON.stringify({ orderId, rating, comment, customerName }),
     });
   },
 

@@ -3,7 +3,7 @@ import path from "path";
 import { createServer as createViteServer } from "vite";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import { eq, and, desc, gte, lte } from "drizzle-orm";
+import { eq, and, desc, gte, lte, ne } from "drizzle-orm";
 import http from "http";
 import { Server as SocketIOServer } from "socket.io";
 import { z } from "zod";
@@ -20,8 +20,54 @@ import {
   orderHistory,
 } from "./src/db/schema.ts";
 import { requireAdminAuth, AuthenticatedRequest } from "./src/middleware/auth.ts";
+import crypto from "crypto";
 
 const JWT_SECRET = process.env.JWT_SECRET || "cafe_manager_secret_key_123456";
+
+function getTableToken(tableId: number): string {
+  return crypto
+    .createHmac("sha256", JWT_SECRET)
+    .update(`table-token-${tableId}`)
+    .digest("hex")
+    .slice(0, 16);
+}
+
+function verifyTableToken(tableId: number, token: string | undefined): boolean {
+  if (!tableId || !token) return false;
+  return getTableToken(tableId) === token;
+}
+
+async function checkTableVerificationAsync(req: express.Request, tableId: number, options?: { isScan?: boolean }): Promise<boolean> {
+  // Allow authenticated admin/staff to bypass this security check
+  const authHeader = req.headers["authorization"];
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    const adminToken = authHeader.split(" ")[1];
+    try {
+      jwt.verify(adminToken, JWT_SECRET);
+      return true;
+    } catch (e) {
+      // Ignore and proceed to regular table token check
+    }
+  }
+
+  const token = (req.headers["x-table-token"] || req.query.token) as string | undefined;
+  if (!verifyTableToken(tableId, token)) {
+    return false;
+  }
+
+  const isScan = options?.isScan ?? (req.query.scan === "true");
+  if (!isScan) {
+    const sessionToken = (req.headers["x-session-token"] || req.query.sessionToken) as string | undefined;
+    if (!sessionToken) return false;
+
+    const [table] = await db.select().from(tables).where(eq(tables.id, tableId)).limit(1);
+    if (!table || !table.sessionToken || table.sessionToken !== sessionToken) {
+      return false;
+    }
+  }
+
+  return true;
+}
 
 export let appInstance: any = null;
 export let ioInstance: any = null;
@@ -691,9 +737,28 @@ async function startServer() {
         return res.status(400).json({ error: "Invalid table ID" });
       }
 
+      const isScan = req.query.scan === "true";
+
+      if (!(await checkTableVerificationAsync(req, tableId, { isScan }))) {
+        return res.status(403).json({ error: "Security verification failed: Invalid table session. Please scan the QR code at your table." });
+      }
+
       const [table] = await db.select().from(tables).where(eq(tables.id, tableId)).limit(1);
       if (!table) {
         return res.status(404).json({ error: "Table not found" });
+      }
+
+      let sessionTokenToReturn = table.sessionToken;
+
+      if (isScan) {
+        sessionTokenToReturn = crypto.randomUUID();
+        await db
+          .update(tables)
+          .set({ 
+            sessionToken: sessionTokenToReturn,
+            updatedAt: new Date()
+          })
+          .where(eq(tables.id, tableId));
       }
 
       // Find the active order (pending, preparing, or ready) for this table
@@ -704,9 +769,51 @@ async function startServer() {
         .orderBy(desc(orders.createdAt));
 
       let activeOrder = null;
-      const incompleteOrder = activeOrdersList.find(
+      let incompleteOrder = activeOrdersList.find(
         (o) => o.status !== "completed"
       );
+
+      if (incompleteOrder && isScan && incompleteOrder.billRequested) {
+        // Automatically complete the previous bill-requested order and archive it to history
+        const orderId = incompleteOrder.id;
+        await db
+          .update(orders)
+          .set({ status: "completed", updatedAt: new Date() })
+          .where(eq(orders.id, orderId));
+
+        // Fetch order items to write to history
+        const itemsList = await db
+          .select({
+            quantity: orderItems.quantity,
+            unitPrice: orderItems.unitPrice,
+            name: menuItems.name,
+          })
+          .from(orderItems)
+          .innerJoin(menuItems, eq(orderItems.menuItemId, menuItems.id))
+          .where(eq(orderItems.orderId, orderId));
+
+        await db.insert(orderHistory).values({
+          tableId: tableId,
+          tableLabel: table.label,
+          orderId: orderId,
+          totalCost: incompleteOrder.totalPrice,
+          itemDetails: JSON.stringify(itemsList),
+          paymentMethod: incompleteOrder.paymentMethod || "cash",
+        });
+
+        // Set table back to available
+        await db
+          .update(tables)
+          .set({ status: "available", sessionToken: sessionTokenToReturn, updatedAt: new Date() })
+          .where(eq(tables.id, tableId));
+
+        // Emit socket events so admin and others are updated live
+        emitOrderUpdated({ ...incompleteOrder, status: "completed" });
+        emitTableStatusChanged(tableId, "available");
+
+        // Clear incompleteOrder so activeOrder becomes null and starts a fresh session
+        incompleteOrder = undefined;
+      }
 
       if (incompleteOrder) {
         // Fetch items for this active order
@@ -730,9 +837,12 @@ async function startServer() {
         };
       }
 
+      const [updatedTable] = await db.select().from(tables).where(eq(tables.id, tableId)).limit(1);
+
       res.json({
-        table,
+        table: updatedTable || table,
         activeOrder,
+        sessionToken: sessionTokenToReturn,
       });
     } catch (error) {
       handleDbError(res, error, "Failed to fetch table details");
@@ -748,6 +858,11 @@ async function startServer() {
       if (isNaN(tableId)) {
         return res.status(400).json({ error: "Invalid table ID" });
       }
+
+      if (!(await checkTableVerificationAsync(req, tableId))) {
+        return res.status(403).json({ error: "Security verification failed: Invalid table session. Please scan the QR code at your table." });
+      }
+
       if (!items || !Array.isArray(items) || items.length === 0) {
         return res.status(400).json({ error: "Order items are required" });
       }
@@ -755,6 +870,17 @@ async function startServer() {
       const [table] = await db.select().from(tables).where(eq(tables.id, tableId)).limit(1);
       if (!table) {
         return res.status(404).json({ error: "Table not found" });
+      }
+
+      // Check if there is an active order with billRequested true for this table
+      const activeOrders = await db
+        .select()
+        .from(orders)
+        .where(and(eq(orders.tableId, tableId), ne(orders.status, "completed")));
+      
+      const billRequestedOrder = activeOrders.find(o => o.billRequested);
+      if (billRequestedOrder) {
+        return res.status(403).json({ error: "Ordering is locked because a bill has already been requested for this table. If you want to order again, please scan the QR code to start a new session." });
       }
 
       // 1. Calculate prices and verify availability of menu items
@@ -861,7 +987,7 @@ async function startServer() {
   // POST /api/feedback
   app.post("/api/feedback", async (req, res) => {
     try {
-      const { orderId, rating, comment } = req.body;
+      const { orderId, rating, comment, customerName } = req.body;
       if (!orderId || !rating) {
         return res.status(400).json({ error: "Order ID and star rating are required" });
       }
@@ -871,12 +997,17 @@ async function startServer() {
         return res.status(404).json({ error: "Order not found" });
       }
 
+      if (!(await checkTableVerificationAsync(req, order.tableId))) {
+        return res.status(403).json({ error: "Security verification failed: Invalid table session. Please scan the QR code at your table." });
+      }
+
       const [newFeedback] = await db
         .insert(feedback)
         .values({
           orderId,
           rating,
           comment,
+          customerName,
         })
         .returning();
 
@@ -904,10 +1035,25 @@ async function startServer() {
       const { table_id, tableId: tId, items } = parsed.data;
       const tableId = (tId ?? table_id) as number;
 
+      if (!(await checkTableVerificationAsync(req, tableId))) {
+        return res.status(403).json({ error: "Security verification failed: Invalid table session. Please scan the QR code at your table." });
+      }
+
       // Check if table exists
       const [table] = await db.select().from(tables).where(eq(tables.id, tableId)).limit(1);
       if (!table) {
         return res.status(404).json({ error: "Table not found" });
+      }
+
+      // Check if there is an active order with billRequested true for this table
+      const activeOrders = await db
+        .select()
+        .from(orders)
+        .where(and(eq(orders.tableId, tableId), ne(orders.status, "completed")));
+      
+      const billRequestedOrder = activeOrders.find(o => o.billRequested);
+      if (billRequestedOrder) {
+        return res.status(403).json({ error: "Ordering is locked because a bill has already been requested for this table. If you want to order again, please scan the QR code to start a new session." });
       }
 
       // Calculate prices and verify availability of menu items
@@ -1083,7 +1229,7 @@ async function startServer() {
 
         await db
           .update(tables)
-          .set({ status: "available", updatedAt: new Date() })
+          .set({ status: "available", sessionToken: null, updatedAt: new Date() })
           .where(eq(tables.id, order.tableId));
 
         emitTableStatusChanged(order.tableId, "available");
@@ -1139,6 +1285,15 @@ async function startServer() {
       if (!order) {
         return res.status(404).json({ error: "Order not found" });
       }
+
+      if (!(await checkTableVerificationAsync(req, order.tableId))) {
+        return res.status(403).json({ error: "Security verification failed: Invalid table session. Please scan the QR code at your table." });
+      }
+
+      if (order.billRequested) {
+        return res.status(400).json({ error: "Cannot modify items because the bill has already been requested for this order. If you want to order again, please scan the QR code to start a new session." });
+      }
+
       if (order.status === "ready" || order.status === "completed") {
         return res.status(400).json({ error: "Cannot modify items of an order that is ready or completed" });
       }
@@ -1240,6 +1395,10 @@ async function startServer() {
       const [order] = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
       if (!order) {
         return res.status(404).json({ error: "Order not found" });
+      }
+
+      if (!(await checkTableVerificationAsync(req, order.tableId))) {
+        return res.status(403).json({ error: "Security verification failed: Invalid table session. Please scan the QR code at your table." });
       }
 
       // Update billRequested flag
@@ -1432,7 +1591,11 @@ async function startServer() {
   app.get("/api/admin/tables", requireAdminAuth, async (req, res) => {
     try {
       const allTables = await db.select().from(tables).orderBy(tables.id);
-      res.json(allTables);
+      const tablesWithTokens = allTables.map((t) => ({
+        ...t,
+        token: getTableToken(t.id),
+      }));
+      res.json(tablesWithTokens);
     } catch (error) {
       handleDbError(res, error, "Failed to fetch tables");
     }
@@ -1455,7 +1618,10 @@ async function startServer() {
         })
         .returning();
 
-      res.status(201).json(newTable);
+      res.status(201).json({
+        ...newTable,
+        token: getTableToken(newTable.id),
+      });
     } catch (error) {
       handleDbError(res, error, "Failed to create table");
     }
@@ -1482,7 +1648,10 @@ async function startServer() {
         .where(eq(tables.id, tableId))
         .returning();
 
-      res.json(updatedTable);
+      res.json({
+        ...updatedTable,
+        token: getTableToken(updatedTable.id),
+      });
     } catch (error) {
       handleDbError(res, error, "Failed to update table");
     }
@@ -1749,7 +1918,7 @@ async function startServer() {
         // 2. Set table back to 'available'
         await db
           .update(tables)
-          .set({ status: "available", updatedAt: new Date() })
+          .set({ status: "available", sessionToken: null, updatedAt: new Date() })
           .where(eq(tables.id, order.tableId));
 
         emitTableStatusChanged(order.tableId, "available");
@@ -1795,6 +1964,7 @@ async function startServer() {
           orderId: feedback.orderId,
           rating: feedback.rating,
           comment: feedback.comment,
+          customerName: feedback.customerName,
           createdAt: feedback.createdAt,
           tableLabel: tables.label,
         })

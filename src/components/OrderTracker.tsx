@@ -1,6 +1,6 @@
 import React from "react";
 import { Order, MenuItem } from "../types.ts";
-import { Clock, CheckCircle2, Utensils, Sparkles, MessageSquare, Star, PlusCircle, ArrowLeft, Edit2, Receipt } from "lucide-react";
+import { Clock, CheckCircle2, Utensils, Sparkles, MessageSquare, Star, PlusCircle, ArrowLeft, Edit2, Receipt, Lock } from "lucide-react";
 import { motion } from "motion/react";
 
 interface OrderTrackerProps {
@@ -11,7 +11,7 @@ interface OrderTrackerProps {
   billRequestLoading: boolean;
   // Feedback props
   feedbackSubmitted: boolean;
-  onSubmitFeedback: (rating: number, comment: string) => Promise<void>;
+  onSubmitFeedback: (rating: number, comment: string, customerName: string) => Promise<void>;
   feedbackLoading: boolean;
   onTriggerAnimation?: () => void;
 }
@@ -29,10 +29,11 @@ export default function OrderTracker({
 }: OrderTrackerProps) {
   const [rating, setRating] = React.useState(5);
   const [comment, setComment] = React.useState("");
+  const [customerName, setCustomerName] = React.useState("");
 
   const handleFeedbackSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmitFeedback(rating, comment);
+    onSubmitFeedback(rating, comment, customerName);
   };
 
   // Define steps
@@ -208,13 +209,25 @@ export default function OrderTracker({
       )}
 
       {/* Primary Action: Go back to menu to add more items */}
-      <button
-        onClick={onAddMore}
-        className="w-full py-3.5 bg-white hover:bg-slate-50 active:scale-[0.99] border border-slate-200 text-slate-800 font-bold text-xs rounded-2xl flex items-center justify-center gap-2 cursor-pointer shadow-sm transition-all"
-      >
-        <PlusCircle className="w-4 h-4 text-amber-600" />
-        <span>Add more items to order</span>
-      </button>
+      {order.billRequested ? (
+        <div className="w-full p-4.5 bg-rose-50 border border-rose-200 text-rose-800 rounded-2xl flex flex-col items-center justify-center gap-2 text-center text-xs shadow-sm">
+          <div className="flex items-center gap-2 font-extrabold text-rose-950">
+            <Lock className="w-4 h-4 text-rose-600 shrink-0" />
+            <span>Ordering Locked (Bill Requested)</span>
+          </div>
+          <p className="text-slate-600 text-[11px] leading-relaxed">
+            For security, please <strong>re-scan the QR code</strong> on your table to unlock ordering and start a new session.
+          </p>
+        </div>
+      ) : (
+        <button
+          onClick={onAddMore}
+          className="w-full py-3.5 bg-white hover:bg-slate-50 active:scale-[0.99] border border-slate-200 text-slate-800 font-bold text-xs rounded-2xl flex items-center justify-center gap-2 cursor-pointer shadow-sm transition-all"
+        >
+          <PlusCircle className="w-4 h-4 text-amber-600" />
+          <span>Add more items to order</span>
+        </button>
+      )}
 
       {/* Request Bill Button */}
       {order.status !== "completed" && (
@@ -285,6 +298,15 @@ export default function OrderTracker({
                     />
                   </button>
                 ))}
+              </div>
+              <div className="space-y-2">
+                <input
+                  type="text"
+                  value={customerName}
+                  onChange={(e) => setCustomerName(e.target.value)}
+                  placeholder="Your Name (Optional)"
+                  className="w-full bg-slate-50/50 border border-slate-200 focus:border-amber-400 rounded-2xl px-4 py-3 md:p-3 text-base md:text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-amber-400/25 transition-all"
+                />
               </div>
               <div>
                 <textarea

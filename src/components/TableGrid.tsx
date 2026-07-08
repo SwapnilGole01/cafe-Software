@@ -150,7 +150,7 @@ export const TableGrid: React.FC<TableGridProps> = ({
   return (
     <div className="space-y-6 font-sans relative">
       <div>
-        <h2 className="text-xl font-bold tracking-tight text-slate-900">cafe Software Table Layout</h2>
+        <h2 className="text-xl font-bold tracking-tight text-slate-900">Table Layout</h2>
         <p className="text-slate-500 text-xs mt-1">Real-time occupancy status and active orders overview.</p>
       </div>
 

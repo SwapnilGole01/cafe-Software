@@ -25,7 +25,9 @@ import {
   X,
   FileSpreadsheet,
   Volume2,
+  Volume1,
   VolumeX,
+  BellRing,
   CreditCard,
   Banknote,
   Printer,
@@ -201,124 +203,266 @@ export default function AdminDashboard({ owner, onLogout }: AdminDashboardProps)
     }
   }, [activeTab, owner.role]);
 
-  const [soundEnabled, setSoundEnabled] = useState<boolean>(() => {
-    return localStorage.getItem("adminSoundEnabled") !== "false";
+  const audioCtxRef = useRef<AudioContext | null>(null);
+
+  const initAudioContext = () => {
+    try {
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioContextClass) return null;
+      
+      // Attempt to reuse global audio context from root if initialized
+      if ((window as any).globalAudioContext) {
+        audioCtxRef.current = (window as any).globalAudioContext;
+      }
+      
+      if (!audioCtxRef.current) {
+        audioCtxRef.current = new AudioContextClass();
+        (window as any).globalAudioContext = audioCtxRef.current;
+      }
+      if (audioCtxRef.current && audioCtxRef.current.state === "suspended") {
+        audioCtxRef.current.resume().catch(() => {});
+      }
+      return audioCtxRef.current;
+    } catch (err) {
+      console.error("AudioContext initialization error:", err);
+      return null;
+    }
+  };
+
+  useEffect(() => {
+    const resumeAudio = () => {
+      initAudioContext();
+    };
+    window.addEventListener("click", resumeAudio);
+    window.addEventListener("pointerdown", resumeAudio);
+    window.addEventListener("keydown", resumeAudio);
+    return () => {
+      window.removeEventListener("click", resumeAudio);
+      window.removeEventListener("pointerdown", resumeAudio);
+      window.removeEventListener("keydown", resumeAudio);
+    };
+  }, []);
+
+  const [alertSoundType, setAlertSoundType] = useState<"standard" | "loud" | "muted">(() => {
+    const stored = localStorage.getItem("adminAlertSoundType");
+    if (stored === "standard" || stored === "loud" || stored === "muted") {
+      return stored;
+    }
+    return "loud"; // Default to loud kitchen buzzer on customer order!
   });
 
-  const playChime = useCallback((force = false) => {
-    if (!soundEnabled && !force) return;
+  const playChime = useCallback((force = false, forceType?: "standard" | "loud") => {
+    const currentType = forceType || alertSoundType;
+    if (currentType === "muted" && !force) return;
+    
+    const resolvedType = currentType === "muted" ? "standard" : currentType;
+
     try {
-      const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
-      if (!AudioContext) return;
-      const ctx = new AudioContext();
+      const ctx = initAudioContext();
+      if (!ctx) return;
       
-      // Resume if suspended (browser autoplay restriction)
+      const play = () => {
+        const now = ctx.currentTime;
+        if (resolvedType === "loud") {
+          // High-intensity, high-volume kitchen ticket buzzer / repeating siren
+          // We will make 3 sharp, extremely distinct loud buzzy beeps using combined sawtooth and square waves for maximum penetrative volume
+          const duration = 0.22;
+          const pulses = [0.0, 0.35, 0.7]; // Three powerful pulses
+          
+          pulses.forEach((startTime) => {
+            // Primary Oscillator (Sawtooth) for bite and high volume
+            const osc1 = ctx.createOscillator();
+            const gain1 = ctx.createGain();
+            osc1.type = "sawtooth";
+            osc1.frequency.setValueAtTime(880, now + startTime); // A5
+            
+            gain1.gain.setValueAtTime(0, now + startTime);
+            gain1.gain.linearRampToValueAtTime(0.85, now + startTime + 0.02);
+            gain1.gain.exponentialRampToValueAtTime(0.001, now + startTime + duration);
+            
+            osc1.connect(gain1);
+            gain1.connect(ctx.destination);
+            
+            osc1.start(now + startTime);
+            osc1.stop(now + startTime + duration + 0.05);
+
+            // Secondary Oscillator (Square) slightly detuned for heavy acoustic vibration / buzzer effect
+            const osc2 = ctx.createOscillator();
+            const gain2 = ctx.createGain();
+            osc2.type = "square";
+            osc2.frequency.setValueAtTime(884, now + startTime); // 884 Hz
+            
+            gain2.gain.setValueAtTime(0, now + startTime);
+            gain2.gain.linearRampToValueAtTime(0.65, now + startTime + 0.02);
+            gain2.gain.exponentialRampToValueAtTime(0.001, now + startTime + duration);
+            
+            osc2.connect(gain2);
+            gain2.connect(ctx.destination);
+            
+            osc2.start(now + startTime);
+            osc2.stop(now + startTime + duration + 0.05);
+          });
+        } else {
+          // Standard elegant triple-tone digital chime
+          const osc1 = ctx.createOscillator();
+          const gain1 = ctx.createGain();
+          osc1.type = "sine";
+          osc1.frequency.setValueAtTime(523.25, now); // C5
+          gain1.gain.setValueAtTime(0.12, now);
+          gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+          osc1.connect(gain1);
+          gain1.connect(ctx.destination);
+          osc1.start(now);
+          osc1.stop(now + 0.45);
+          
+          const osc2 = ctx.createOscillator();
+          const gain2 = ctx.createGain();
+          osc2.type = "sine";
+          osc2.frequency.setValueAtTime(783.99, now + 0.12); // G5
+          gain2.gain.setValueAtTime(0, now);
+          gain2.gain.setValueAtTime(0.12, now + 0.12);
+          gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.12 + 0.45);
+          osc2.connect(gain2);
+          gain2.connect(ctx.destination);
+          osc2.start(now + 0.12);
+          osc2.stop(now + 0.12 + 0.45);
+
+          const osc3 = ctx.createOscillator();
+          const gain3 = ctx.createGain();
+          osc3.type = "sine";
+          osc3.frequency.setValueAtTime(1046.50, now + 0.24); // C6
+          gain3.gain.setValueAtTime(0, now);
+          gain3.gain.setValueAtTime(0.15, now + 0.24);
+          gain3.gain.exponentialRampToValueAtTime(0.001, now + 0.24 + 0.6);
+          osc3.connect(gain3);
+          gain3.connect(ctx.destination);
+          osc3.start(now + 0.24);
+          osc3.stop(now + 0.24 + 0.6);
+        }
+      };
+
       if (ctx.state === "suspended") {
-        ctx.resume();
+        ctx.resume().then(play).catch(play);
+      } else {
+        play();
       }
-
-      const now = ctx.currentTime;
-      
-      // Premium triple-tone digital chime alert (C5 then G5 then C6 for distinct cafe orders)
-      const osc1 = ctx.createOscillator();
-      const gain1 = ctx.createGain();
-      osc1.type = "sine";
-      osc1.frequency.setValueAtTime(523.25, now); // C5
-      gain1.gain.setValueAtTime(0.12, now);
-      gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
-      osc1.connect(gain1);
-      gain1.connect(ctx.destination);
-      osc1.start(now);
-      osc1.stop(now + 0.45);
-      
-      const osc2 = ctx.createOscillator();
-      const gain2 = ctx.createGain();
-      osc2.type = "sine";
-      osc2.frequency.setValueAtTime(783.99, now + 0.12); // G5
-      gain2.gain.setValueAtTime(0, now);
-      gain2.gain.setValueAtTime(0.12, now + 0.12);
-      gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.12 + 0.45);
-      osc2.connect(gain2);
-      gain2.connect(ctx.destination);
-      osc2.start(now + 0.12);
-      osc2.stop(now + 0.12 + 0.45);
-
-      const osc3 = ctx.createOscillator();
-      const gain3 = ctx.createGain();
-      osc3.type = "sine";
-      osc3.frequency.setValueAtTime(1046.50, now + 0.24); // C6 (High energetic accent)
-      gain3.gain.setValueAtTime(0, now);
-      gain3.gain.setValueAtTime(0.15, now + 0.24);
-      gain3.gain.exponentialRampToValueAtTime(0.001, now + 0.24 + 0.6);
-      osc3.connect(gain3);
-      gain3.connect(ctx.destination);
-      osc3.start(now + 0.24);
-      osc3.stop(now + 0.24 + 0.6);
-
     } catch (err) {
       console.error("Web Audio API chime error:", err);
     }
-  }, [soundEnabled]);
+  }, [alertSoundType]);
 
-  const playBillChime = useCallback((force = false) => {
-    if (!soundEnabled && !force) return;
+  const playBillChime = useCallback((force = false, forceType?: "standard" | "loud") => {
+    const currentType = forceType || alertSoundType;
+    if (currentType === "muted" && !force) return;
+    
+    const resolvedType = currentType === "muted" ? "standard" : currentType;
+
     try {
-      const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
-      if (!AudioContext) return;
-      const ctx = new AudioContext();
-      if (ctx.state === "suspended") {
-        ctx.resume();
-      }
-      const now = ctx.currentTime;
+      const ctx = initAudioContext();
+      if (!ctx) return;
       
-      const osc1 = ctx.createOscillator();
-      const gain1 = ctx.createGain();
-      osc1.type = "sine";
-      osc1.frequency.setValueAtTime(1318.51, now); // E6 (crisp high ring)
-      gain1.gain.setValueAtTime(0.12, now);
-      gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.30);
-      osc1.connect(gain1);
-      gain1.connect(ctx.destination);
-      osc1.start(now);
-      osc1.stop(now + 0.30);
+      const play = () => {
+        const now = ctx.currentTime;
+        if (resolvedType === "loud") {
+          // High-volume urgent alarm specifically for bill requests (F6 and A6 double pulse)
+          const billBeeps = [
+            { time: 0.0, freq: 1396.91 }, // F6
+            { time: 0.12, freq: 1396.91 }, // F6
+            { time: 0.35, freq: 1760.00 }, // A6
+            { time: 0.47, freq: 1760.00 }, // A6
+          ];
 
-      const osc2 = ctx.createOscillator();
-      const gain2 = ctx.createGain();
-      osc2.type = "sine";
-      osc2.frequency.setValueAtTime(1567.98, now + 0.15); // G6 (matching double beep)
-      gain2.gain.setValueAtTime(0, now);
-      gain2.gain.setValueAtTime(0.12, now + 0.15);
-      gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.15 + 0.30);
-      osc2.connect(gain2);
-      gain2.connect(ctx.destination);
-      osc2.start(now + 0.15);
-      osc2.stop(now + 0.15 + 0.30);
+          billBeeps.forEach((beep) => {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = "triangle";
+            osc.frequency.setValueAtTime(beep.freq, now + beep.time);
+            
+            gain.gain.setValueAtTime(0, now);
+            gain.gain.setValueAtTime(0.4, now + beep.time);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + beep.time + 0.10);
+            
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            
+            osc.start(now + beep.time);
+            osc.stop(now + beep.time + 0.11);
+          });
+        } else {
+          // Standard high E6/G6 matching chime
+          const osc1 = ctx.createOscillator();
+          const gain1 = ctx.createGain();
+          osc1.type = "sine";
+          osc1.frequency.setValueAtTime(1318.51, now); // E6
+          gain1.gain.setValueAtTime(0.12, now);
+          gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.30);
+          osc1.connect(gain1);
+          gain1.connect(ctx.destination);
+          osc1.start(now);
+          osc1.stop(now + 0.30);
+
+          const osc2 = ctx.createOscillator();
+          const gain2 = ctx.createGain();
+          osc2.type = "sine";
+          osc2.frequency.setValueAtTime(1567.98, now + 0.15); // G6
+          gain2.gain.setValueAtTime(0, now);
+          gain2.gain.setValueAtTime(0.12, now + 0.15);
+          gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.15 + 0.30);
+          osc2.connect(gain2);
+          gain2.connect(ctx.destination);
+          osc2.start(now + 0.15);
+          osc2.stop(now + 0.15 + 0.30);
+        }
+      };
+
+      if (ctx.state === "suspended") {
+        ctx.resume().then(play).catch(play);
+      } else {
+        play();
+      }
     } catch (err) {
       console.error("Web Audio API bill chime error:", err);
     }
-  }, [soundEnabled]);
+  }, [alertSoundType]);
 
-  const toggleSound = () => {
-    const nextState = !soundEnabled;
-    setSoundEnabled(nextState);
-    localStorage.setItem("adminSoundEnabled", nextState ? "true" : "false");
-    // Play a short feedback beep if unmuting
-    if (nextState) {
+  const cycleSound = () => {
+    let nextType: "standard" | "loud" | "muted";
+    if (alertSoundType === "muted") {
+      nextType = "standard";
+    } else if (alertSoundType === "standard") {
+      nextType = "loud";
+    } else {
+      nextType = "muted";
+    }
+    
+    setAlertSoundType(nextType);
+    localStorage.setItem("adminAlertSoundType", nextType);
+    localStorage.setItem("adminSoundEnabled", nextType !== "muted" ? "true" : "false");
+
+    // Play feedback sound
+    if (nextType !== "muted") {
       setTimeout(() => {
         try {
-          const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
-          if (!AudioContext) return;
-          const ctx = new AudioContext();
-          const osc = ctx.createOscillator();
-          const gain = ctx.createGain();
-          osc.type = "sine";
-          osc.frequency.setValueAtTime(880, ctx.currentTime);
-          gain.gain.setValueAtTime(0.08, ctx.currentTime);
-          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
-          osc.connect(gain);
-          gain.connect(ctx.destination);
-          osc.start();
-          osc.stop(ctx.currentTime + 0.15);
+          const ctx = initAudioContext();
+          if (!ctx) return;
+          const play = () => {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = nextType === "loud" ? "triangle" : "sine";
+            osc.frequency.setValueAtTime(nextType === "loud" ? 1100 : 880, ctx.currentTime);
+            gain.gain.setValueAtTime(nextType === "loud" ? 0.3 : 0.08, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start();
+            osc.stop(ctx.currentTime + 0.15);
+          };
+
+          if (ctx.state === "suspended") {
+            ctx.resume().then(play).catch(play);
+          } else {
+            play();
+          }
         } catch (e) {}
       }, 50);
     }
@@ -335,9 +479,7 @@ export default function AdminDashboard({ owner, onLogout }: AdminDashboardProps)
     fetchAllData();
 
     // Set up Socket.io client
-    const socket = io({
-      transports: ["websocket", "polling"],
-    });
+    const socket = io();
 
     socket.on("order:new", (order: Order) => {
       setOrdersList((prev) => {
@@ -584,7 +726,7 @@ export default function AdminDashboard({ owner, onLogout }: AdminDashboardProps)
       <!DOCTYPE html>
       <html>
       <head>
-        <title>cafe Software - Receipt #${order.id}</title>
+        <title>DEV STUDIO - Receipt #${order.id}</title>
         <style>
           @page {
             size: 80mm auto;
@@ -678,7 +820,7 @@ export default function AdminDashboard({ owner, onLogout }: AdminDashboardProps)
       </head>
       <body>
         <div class="header">
-          <h1>CAFE SOFTWARE</h1>
+          <h1>DEV STUDIO</h1>
           <p>College Campus, Food Court Zone</p>
           <p>Tel: +91 98765 43210</p>
           <p>GSTIN: 27AAAAA1111A1Z1</p>
@@ -738,7 +880,7 @@ export default function AdminDashboard({ owner, onLogout }: AdminDashboardProps)
 
         <div class="footer">
           <p>Thank you for dining with us!</p>
-          <p>cafe Software • Fuel for Minds</p>
+          <p>DEV STUDIO • Fuel for Minds</p>
           <p>Share your feedback via the table QR!</p>
         </div>
 
@@ -809,7 +951,7 @@ export default function AdminDashboard({ owner, onLogout }: AdminDashboardProps)
             <div className="w-8 h-8 bg-amber-500 rounded-lg flex items-center justify-center shrink-0">
               <Coffee className="w-5 h-5 text-slate-900" />
             </div>
-            <span className="font-bold text-white tracking-tight hidden lg:inline truncate">cafe Software</span>
+            <span className="font-bold text-white tracking-tight hidden lg:inline truncate">DEV STUDIO</span>
           </div>
 
           <nav className="p-2 lg:p-4 space-y-1">
@@ -887,7 +1029,7 @@ export default function AdminDashboard({ owner, onLogout }: AdminDashboardProps)
         {/* Header */}
         <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 shrink-0">
           <h2 className="text-sm font-semibold text-slate-800 uppercase tracking-wider">
-            {activeTab === "overview" && "Foundation Management"}
+            {activeTab === "overview" && "AS DEV STUDIO"}
             {activeTab === "reports" && "Sales Reports"}
             {activeTab === "orders" && "Live Kitchen Queue"}
             {activeTab === "tables" && "Seating & QR Monitor"}
@@ -898,41 +1040,11 @@ export default function AdminDashboard({ owner, onLogout }: AdminDashboardProps)
             {activeTab === "bills" && "Active Seating Bill Requests"}
           </h2>
           <div className="flex items-center gap-3">
-            {/* Notification Sound Controller */}
-            <button
-              onClick={toggleSound}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-bold cursor-pointer transition-all ${
-                soundEnabled
-                  ? "bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100/80 shadow-sm"
-                  : "bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100"
-              }`}
-              title={soundEnabled ? "Mute notification sounds" : "Unmute notification sounds"}
-            >
-              {soundEnabled ? (
-                <>
-                  <Volume2 className="w-3.5 h-3.5 text-amber-600" />
-                  <span>Alert Sound: On</span>
-                </>
-              ) : (
-                <>
-                  <VolumeX className="w-3.5 h-3.5 text-slate-400" />
-                  <span>Alert Sound: Muted</span>
-                </>
-              )}
-            </button>
-            <button
-              onClick={() => playChime(true)}
-              className="px-3 py-1.5 text-slate-600 hover:text-slate-800 bg-slate-100 hover:bg-slate-200/80 text-xs font-bold rounded-full cursor-pointer transition-all border border-slate-200 shadow-sm"
-              title="Test notification sound volume"
-            >
-              Test Alert
-            </button>
-
-            <div className="flex items-center gap-2 text-xs font-medium text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-100">
+            <div className="hidden items-center gap-2 text-xs font-medium text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-100">
               <span className="w-2 h-2 bg-emerald-500 rounded-full"></span>
               Node.js API Online
             </div>
-            <div className="flex items-center gap-2 text-xs font-medium text-blue-600 bg-blue-50 px-2.5 py-1 rounded-full border border-blue-100">
+            <div className="hidden items-center gap-2 text-xs font-medium text-blue-600 bg-blue-50 px-2.5 py-1 rounded-full border border-blue-100">
               <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
               PostgreSQL Connected
             </div>
@@ -1210,6 +1322,9 @@ export default function AdminDashboard({ owner, onLogout }: AdminDashboardProps)
                 <OrderBoard
                   orders={ordersList}
                   onUpdateOrderStatus={handleUpdateOrderStatus}
+                  alertSoundType={alertSoundType}
+                  onCycleSound={cycleSound}
+                  onPlayTestSound={() => playChime(true)}
                 />
               </motion.div>
             )}
@@ -1225,7 +1340,7 @@ export default function AdminDashboard({ owner, onLogout }: AdminDashboardProps)
               >
                 <div className="flex justify-between items-center">
                   <div>
-                    <h1 className="text-2xl font-bold tracking-tight text-slate-900">Manage cafe Software Tables</h1>
+                    <h1 className="text-2xl font-bold tracking-tight text-slate-900">Manage Tables</h1>
                     <p className="text-slate-500 text-xs mt-1">Configure physical seating layout, inspect statuses, and print QR Codes</p>
                   </div>
                   {owner.role !== "reception" && (
@@ -1295,7 +1410,7 @@ export default function AdminDashboard({ owner, onLogout }: AdminDashboardProps)
                   {/* Seating Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   {tablesList.map((table) => {
-                    const qrLink = `${publicUrl}?table=${table.id}`;
+                    const qrLink = `${publicUrl}?table=${table.id}${table.token ? `&token=${table.token}` : ""}&scan=true`;
                     return (
                       <div key={table.id} className="bg-white rounded-2xl border border-slate-150 p-6 shadow-sm flex flex-col justify-between space-y-6">
                         <div className="flex justify-between items-start">
@@ -1494,6 +1609,11 @@ export default function AdminDashboard({ owner, onLogout }: AdminDashboardProps)
                         <div className="flex justify-between items-start">
                           <div>
                             <span className="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded font-bold uppercase">{review.tableLabel || "Dining Table"}</span>
+                            {review.customerName && (
+                              <span className="text-[10px] bg-amber-50 text-amber-700 ml-1.5 px-2 py-0.5 rounded font-bold">
+                                👤 {review.customerName}
+                              </span>
+                            )}
                             <p className="text-[10px] text-slate-400 font-mono mt-1">Ticket #{review.orderId}</p>
                           </div>
                           <div className="flex text-amber-500">
@@ -2059,7 +2179,7 @@ export default function AdminDashboard({ owner, onLogout }: AdminDashboardProps)
               <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
                 <img
                   src={`https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(
-                    `${publicUrl}?table=${activeQrTable.id}`
+                    `${publicUrl}?table=${activeQrTable.id}${activeQrTable.token ? `&token=${activeQrTable.token}` : ""}&scan=true`
                   )}`}
                   alt={`${activeQrTable.label} QR Code`}
                   referrerPolicy="no-referrer"
@@ -2072,7 +2192,7 @@ export default function AdminDashboard({ owner, onLogout }: AdminDashboardProps)
                   Guests can scan this QR code using any smartphone camera to open the menu and order instantly.
                 </p>
                 <div className="bg-slate-50 border border-slate-200 rounded-xl p-2.5 select-all text-[10px] font-mono break-all text-slate-600">
-                  {`${publicUrl}?table=${activeQrTable.id}`}
+                  {`${publicUrl}?table=${activeQrTable.id}${activeQrTable.token ? `&token=${activeQrTable.token}` : ""}&scan=true`}
                 </div>
               </div>
 
@@ -2156,9 +2276,9 @@ export default function AdminDashboard({ owner, onLogout }: AdminDashboardProps)
                               <h1>${activeQrTable.label}</h1>
                               <p>Scan to Browse Menu & Order</p>
                               <img class="qr" src="https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(
-                                `${publicUrl}?table=${activeQrTable.id}`
+                                `${publicUrl}?table=${activeQrTable.id}${activeQrTable.token ? `&token=${activeQrTable.token}` : ""}&scan=true`
                               )}" />
-                              <div style="font-size: 10px; font-family: monospace; color: #94a3b8;">Powered by cafe Software</div>
+                              <div style="font-size: 10px; font-family: monospace; color: #94a3b8;">Powered by DEV STUDIO</div>
                             </div>
                             <script>
                               window.onload = function() { window.print(); }
@@ -2301,7 +2421,7 @@ export default function AdminDashboard({ owner, onLogout }: AdminDashboardProps)
                 
                 {/* Branding */}
                 <div className="text-center pt-2 pb-3 space-y-0.5">
-                  <h4 className="font-black text-xs tracking-widest text-slate-900 uppercase">cafe Software</h4>
+                  <h4 className="font-black text-xs tracking-widest text-slate-900 uppercase">DEV STUDIO</h4>
                   <p className="text-[8px] text-slate-500">College Campus, Food Court Zone</p>
                   <p className="text-[8px] text-slate-500">Tel: +91 98765 43210</p>
                   <p className="text-[8px] text-slate-500">GSTIN: 27AAAAA1111A1Z1</p>
@@ -2365,7 +2485,7 @@ export default function AdminDashboard({ owner, onLogout }: AdminDashboardProps)
 
                 <div className="text-center text-[8px] text-slate-500 mt-4 leading-normal space-y-0.5">
                   <p className="font-bold">Thank you for dining with us!</p>
-                  <p>cafe Software • Fuel for Minds</p>
+                  <p>DEV STUDIO • Fuel for Minds</p>
                   <p>Share your feedback via the table QR!</p>
                 </div>
 

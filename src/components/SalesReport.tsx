@@ -11,7 +11,9 @@ import {
   RefreshCw,
   Clock,
   CreditCard,
-  Banknote
+  Banknote,
+  FileSpreadsheet,
+  FileText
 } from "lucide-react";
 import {
   BarChart,
@@ -98,6 +100,380 @@ export const SalesReport: React.FC = () => {
     }
   };
 
+  const handleExportExcel = () => {
+    if (!report) return;
+
+    let csvContent = "data:text/csv;charset=utf-8,";
+    csvContent += "\uFEFF"; // BOM for UTF-8 Excel handling
+
+    const addRow = (cells: string[]) => {
+      const formattedCells = cells.map(cell => {
+        const str = String(cell).replace(/"/g, '""');
+        return `"${str}"`;
+      });
+      csvContent += formattedCells.join(",") + "\n";
+    };
+
+    addRow(["DEV STUDIO - SALES & REVENUE REPORT"]);
+    addRow([`Report Period: ${rangeType.toUpperCase()}`]);
+    addRow([`Generated At: ${new Date().toLocaleString()}`]);
+    addRow([]);
+
+    addRow(["KEY PERFORMANCE INDICATORS"]);
+    addRow(["Metric", "Value", "Notes"]);
+    addRow(["Total Revenue", `₹${report.totalRevenue.toFixed(2)}`, "Net settled payments"]);
+    addRow(["Total Orders Filled", String(report.totalOrders), "Kitchen orders generated"]);
+    addRow(["Average Order Value", `₹${report.averageOrderValue.toFixed(2)}`, "Average guest ticket spend"]);
+    addRow(["Table Turnover Rate", report.tableTurnoverRate.toFixed(2), "Orders / table / day average"]);
+    addRow([]);
+
+    addRow(["PAYMENT SETTLEMENTS BREAKDOWN"]);
+    addRow(["Payment Method", "Revenue", "Order Count", "Percentage"]);
+    const totalSettle = (report.cashRevenue || 0) + (report.onlineRevenue || 0);
+    const cashPercent = totalSettle > 0 ? Math.round((report.cashRevenue / totalSettle) * 100) : 0;
+    const onlinePercent = totalSettle > 0 ? 100 - cashPercent : 0;
+    addRow(["Cash", `₹${(report.cashRevenue || 0).toFixed(2)}`, String(report.cashOrdersCount || 0), `${cashPercent}%`]);
+    addRow(["Online (UPI / Cards)", `₹${(report.onlineRevenue || 0).toFixed(2)}`, String(report.onlineOrdersCount || 0), `${onlinePercent}%`]);
+    addRow([]);
+
+    addRow(["TOP SELLING ITEMS"]);
+    addRow(["Rank", "Item Name", "Quantity Sold"]);
+    if (report.topSellingItems.length === 0) {
+      addRow(["-", "No dishes sold in this period", "0"]);
+    } else {
+      report.topSellingItems.forEach((item, idx) => {
+        addRow([String(idx + 1), item.name, String(item.quantitySold)]);
+      });
+    }
+    addRow([]);
+
+    addRow(["HOURLY REVENUE STREAM"]);
+    addRow(["Hour", "Revenue"]);
+    if (report.revenueByHour.length === 0) {
+      addRow(["-", "No hourly stream data"]);
+    } else {
+      report.revenueByHour.forEach((item) => {
+        addRow([item.hour, `₹${item.revenue.toFixed(2)}`]);
+      });
+    }
+
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    const filename = `DEV_STUDIO_SalesReport_${rangeType}_${new Date().toISOString().slice(0, 10)}.csv`;
+    link.setAttribute("download", filename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleExportPDF = () => {
+    if (!report) return;
+
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      alert("Please allow pop-ups to export reports as PDF.");
+      return;
+    }
+
+    const title = `DEV STUDIO Sales Report - ${rangeType.toUpperCase()}`;
+    const dateStr = new Date().toLocaleString();
+
+    const topSellingItemsHTML = report.topSellingItems.length === 0
+      ? `<tr><td colspan="3" style="text-align: center; color: #64748b; padding: 12px;">No dishes sold in this period.</td></tr>`
+      : report.topSellingItems.map((item, idx) => `
+        <tr style="border-bottom: 1px solid #e2e8f0;">
+          <td style="padding: 10px; font-weight: bold; color: #1e293b;">${idx + 1}</td>
+          <td style="padding: 10px; color: #334155;">${item.name}</td>
+          <td style="padding: 10px; text-align: right; font-weight: bold; color: #0f172a;">${item.quantitySold} units</td>
+        </tr>
+      `).join("");
+
+    const hourlyRevenueHTML = report.revenueByHour.length === 0
+      ? `<tr><td colspan="2" style="text-align: center; color: #64748b; padding: 12px;">No hourly distribution data.</td></tr>`
+      : report.revenueByHour.map(item => `
+        <tr style="border-bottom: 1px solid #f1f5f9;">
+          <td style="padding: 8px 10px; color: #475569; font-family: monospace;">${item.hour}</td>
+          <td style="padding: 8px 10px; text-align: right; font-weight: bold; color: #0f172a; font-family: monospace;">₹${item.revenue.toFixed(2)}</td>
+        </tr>
+      `).join("");
+
+    const totalSettle = (report.cashRevenue || 0) + (report.onlineRevenue || 0);
+    const cashPercent = totalSettle > 0 ? Math.round((report.cashRevenue / totalSettle) * 100) : 0;
+    const onlinePercent = totalSettle > 0 ? 100 - cashPercent : 0;
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>${title}</title>
+          <style>
+            body {
+              font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+              color: #1e293b;
+              margin: 40px;
+              padding: 0;
+              background-color: #ffffff;
+              line-height: 1.5;
+            }
+            .header {
+              display: flex;
+              justify-content: space-between;
+              align-items: flex-start;
+              border-bottom: 2px solid #f1f5f9;
+              padding-bottom: 20px;
+              margin-bottom: 30px;
+            }
+            .header h1 {
+              font-size: 24px;
+              font-weight: 800;
+              color: #0f172a;
+              margin: 0;
+              letter-spacing: -0.025em;
+            }
+            .header p {
+              font-size: 13px;
+              color: #64748b;
+              margin: 4px 0 0 0;
+            }
+            .meta-info {
+              text-align: right;
+              font-size: 12px;
+              color: #64748b;
+              line-height: 1.6;
+            }
+            .grid-kpi {
+              display: grid;
+              grid-template-columns: repeat(4, 1fr);
+              gap: 20px;
+              margin-bottom: 30px;
+            }
+            .kpi-card {
+              background-color: #f8fafc;
+              border: 1px solid #e2e8f0;
+              border-radius: 12px;
+              padding: 16px;
+            }
+            .kpi-title {
+              font-size: 10px;
+              font-weight: 700;
+              text-transform: uppercase;
+              color: #64748b;
+              letter-spacing: 0.05em;
+              margin-bottom: 6px;
+            }
+            .kpi-value {
+              font-size: 20px;
+              font-weight: 800;
+              color: #0f172a;
+              font-family: monospace;
+            }
+            .kpi-desc {
+              font-size: 10px;
+              color: #94a3b8;
+              margin-top: 4px;
+            }
+            .section-grid {
+              display: grid;
+              grid-template-columns: 1fr 1fr;
+              gap: 30px;
+              margin-bottom: 30px;
+            }
+            .card {
+              border: 1px solid #e2e8f0;
+              border-radius: 12px;
+              padding: 20px;
+            }
+            .card h3 {
+              font-size: 14px;
+              font-weight: 700;
+              color: #0f172a;
+              margin-top: 0;
+              margin-bottom: 12px;
+              text-transform: uppercase;
+              letter-spacing: 0.05em;
+              border-bottom: 1px solid #f1f5f9;
+              padding-bottom: 8px;
+            }
+            .settlements-bar-container {
+              margin-bottom: 15px;
+            }
+            .settlements-bar {
+              height: 12px;
+              background-color: #e2e8f0;
+              border-radius: 6px;
+              overflow: hidden;
+              display: flex;
+            }
+            .bar-cash {
+              background-color: #10b981;
+              height: 100%;
+            }
+            .bar-online {
+              background-color: #3b82f6;
+              height: 100%;
+            }
+            .settlements-legend {
+              display: flex;
+              justify-content: space-between;
+              font-size: 11px;
+              font-weight: 600;
+              margin-top: 8px;
+            }
+            .legend-item {
+              display: flex;
+              align-items: center;
+              gap: 6px;
+            }
+            .dot-cash {
+              width: 8px;
+              height: 8px;
+              background-color: #10b981;
+              border-radius: 50%;
+            }
+            .dot-online {
+              width: 8px;
+              height: 8px;
+              background-color: #3b82f6;
+              border-radius: 50%;
+            }
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              font-size: 12px;
+            }
+            th {
+              text-align: left;
+              padding: 8px 10px;
+              background-color: #f8fafc;
+              color: #475569;
+              font-weight: 700;
+              border-bottom: 2px solid #e2e8f0;
+            }
+            .footer {
+              text-align: center;
+              font-size: 10px;
+              color: #94a3b8;
+              border-top: 1px solid #e2e8f0;
+              padding-top: 15px;
+              margin-top: 40px;
+            }
+            @media print {
+              body {
+                margin: 20px;
+              }
+              button {
+                display: none;
+              }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div>
+              <h1>DEV STUDIO</h1>
+              <p>Revenue & Sales Performance Statement</p>
+            </div>
+            <div class="meta-info">
+              <div><strong>Period:</strong> ${rangeType.toUpperCase()}</div>
+              <div><strong>Generated:</strong> ${dateStr}</div>
+              <div><strong>Status:</strong> Audited & Certified</div>
+            </div>
+          </div>
+
+          <div class="grid-kpi">
+            <div class="kpi-card">
+              <div class="kpi-title">Total Revenue</div>
+              <div class="kpi-value">₹${report.totalRevenue.toFixed(2)}</div>
+              <div class="kpi-desc">Net settled payments</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-title">Orders Filled</div>
+              <div class="kpi-value">${report.totalOrders}</div>
+              <div class="kpi-desc">Total kitchen orders</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-title">Avg Ticket Value</div>
+              <div class="kpi-value">₹${report.averageOrderValue.toFixed(2)}</div>
+              <div class="kpi-desc">Avg guest spend ticket</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-title">Turnover Rate</div>
+              <div class="kpi-value">${report.tableTurnoverRate.toFixed(2)}</div>
+              <div class="kpi-desc">Orders / Table / Day</div>
+            </div>
+          </div>
+
+          <div class="card" style="margin-bottom: 30px;">
+            <h3>Payment Settlement Streams</h3>
+            <div class="settlements-bar-container">
+              <div class="settlements-bar">
+                <div class="bar-cash" style="width: ${cashPercent}%;"></div>
+                <div class="bar-online" style="width: ${onlinePercent}%;"></div>
+              </div>
+              <div class="settlements-legend">
+                <div class="legend-item" style="color: #065f46;">
+                  <span class="dot-cash"></span>
+                  Cash: ${cashPercent}% (₹${(report.cashRevenue || 0).toFixed(2)} - ${report.cashOrdersCount || 0} orders)
+                </div>
+                <div class="legend-item" style="color: #1e40af;">
+                  <span class="dot-online"></span>
+                  Online: ${onlinePercent}% (₹${(report.onlineRevenue || 0).toFixed(2)} - ${report.onlineOrdersCount || 0} orders)
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="section-grid">
+            <div class="card">
+              <h3>Top Selling Dishes</h3>
+              <table>
+                <thead>
+                  <tr>
+                    <th style="width: 40px;">Rank</th>
+                    <th>Dish Name</th>
+                    <th style="text-align: right; width: 100px;">Units Sold</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${topSellingItemsHTML}
+                </tbody>
+              </table>
+            </div>
+
+            <div class="card">
+              <h3>Hourly Revenue Stream</h3>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Hour of Day</th>
+                    <th style="text-align: right; width: 120px;">Revenue Stream</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${hourlyRevenueHTML}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="footer">
+            <p>DEV STUDIO Restaurant Management Platform • Confidential Business Analytics</p>
+            <p>© ${new Date().getFullYear()} DEV STUDIO. All rights reserved.</p>
+          </div>
+
+          <script>
+            window.onload = function() {
+              setTimeout(function() {
+                window.print();
+              }, 300);
+            }
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
   useEffect(() => {
     if (rangeType !== "custom") {
       fetchReport();
@@ -155,6 +531,27 @@ export const SalesReport: React.FC = () => {
           >
             <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin text-amber-500" : ""}`} />
           </button>
+
+          {report && (
+            <div className="flex items-center gap-2 border-l border-slate-200 pl-2.5 ml-0.5">
+              <button
+                onClick={handleExportExcel}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 hover:border-emerald-300 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm"
+                title="Export report to Excel (CSV)"
+              >
+                <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                <span className="hidden sm:inline">Export Excel</span>
+              </button>
+              <button
+                onClick={handleExportPDF}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 hover:border-blue-300 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm"
+                title="Export report to PDF"
+              >
+                <FileText className="w-4 h-4 text-blue-600" />
+                <span className="hidden sm:inline">Export PDF</span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
 

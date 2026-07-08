@@ -65,6 +65,34 @@ export default function App() {
     setView("admin");
   };
 
+  useEffect(() => {
+    const resumeAudio = () => {
+      try {
+        const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+        if (AudioContextClass) {
+          if (!(window as any).globalAudioContext) {
+            (window as any).globalAudioContext = new AudioContextClass();
+          }
+          const ctx = (window as any).globalAudioContext;
+          if (ctx && ctx.state === "suspended") {
+            ctx.resume();
+          }
+        }
+      } catch (err) {
+        console.error("Global audio resume error:", err);
+      }
+    };
+
+    window.addEventListener("click", resumeAudio);
+    window.addEventListener("pointerdown", resumeAudio);
+    window.addEventListener("keydown", resumeAudio);
+    return () => {
+      window.removeEventListener("click", resumeAudio);
+      window.removeEventListener("pointerdown", resumeAudio);
+      window.removeEventListener("keydown", resumeAudio);
+    };
+  }, []);
+
   if (checkingAuth) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-slate-900 text-white font-sans">
@@ -73,7 +101,7 @@ export default function App() {
           <Coffee className="w-4 h-4 text-amber-500 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
         </div>
         <p className="text-xs text-slate-500 font-semibold mt-4 tracking-wider uppercase animate-pulse">
-          Starting cafe Software Server...
+          Starting DEV STUDIO Server...
         </p>
       </div>
     );

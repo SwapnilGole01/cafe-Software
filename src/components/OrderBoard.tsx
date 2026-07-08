@@ -6,6 +6,9 @@ import { motion, AnimatePresence } from "motion/react";
 interface OrderBoardProps {
   orders: Order[];
   onUpdateOrderStatus: (orderId: number, status: Order["status"]) => void;
+  alertSoundType?: "standard" | "loud" | "muted";
+  onCycleSound?: () => void;
+  onPlayTestSound?: () => void;
 }
 
 // Live timer card to show exact time elapsed since order submission
@@ -155,7 +158,13 @@ const OrderCard: React.FC<{
   );
 };
 
-export const OrderBoard: React.FC<OrderBoardProps> = ({ orders, onUpdateOrderStatus }) => {
+export const OrderBoard: React.FC<OrderBoardProps> = ({ 
+  orders, 
+  onUpdateOrderStatus,
+  alertSoundType = "loud",
+  onCycleSound,
+  onPlayTestSound
+}) => {
   const pendingOrders = orders.filter((o) => o.status === "pending");
   const preparingOrders = orders.filter((o) => o.status === "preparing");
   const readyOrders = orders.filter((o) => o.status === "ready");
@@ -180,11 +189,15 @@ export const OrderBoard: React.FC<OrderBoardProps> = ({ orders, onUpdateOrderSta
 
   return (
     <div className="space-y-6 font-sans">
-      <div>
-        <h2 className="text-xl font-bold tracking-tight text-slate-900">Live Orders Pipeline</h2>
-        <p className="text-slate-500 text-xs mt-1">
-          Drag-and-click orders through the kitchen preparation pipeline.
-        </p>
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-bold tracking-tight text-slate-900">Live Orders Pipeline</h2>
+          <p className="text-slate-500 text-xs mt-1">
+            Drag-and-click orders through the kitchen preparation pipeline.
+          </p>
+        </div>
+
+
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

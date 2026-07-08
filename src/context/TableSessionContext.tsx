@@ -3,6 +3,10 @@ import React, { createContext, useContext, useState, useEffect } from "react";
 interface TableSessionContextType {
   tableId: number | null;
   setTableId: (id: number | null) => void;
+  tableToken: string | null;
+  setTableToken: (token: string | null) => void;
+  sessionToken: string | null;
+  setSessionToken: (token: string | null) => void;
 }
 
 const TableSessionContext = createContext<TableSessionContextType | undefined>(undefined);
@@ -41,6 +45,27 @@ export function TableSessionProvider({ children }: { children: React.ReactNode }
     return null;
   });
 
+  const [tableToken, setTableTokenState] = useState<string | null>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tokenParam = params.get("token");
+    if (tokenParam) {
+      localStorage.setItem("cafe_table_token", tokenParam);
+      return tokenParam;
+    }
+
+    return localStorage.getItem("cafe_table_token");
+  });
+
+  const [sessionToken, setSessionTokenState] = useState<string | null>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const isScan = params.get("scan") === "true";
+    if (isScan) {
+      localStorage.removeItem("cafe_session_token");
+      return null;
+    }
+    return localStorage.getItem("cafe_session_token");
+  });
+
   const setTableId = (id: number | null) => {
     setTableIdState(id);
     if (id !== null) {
@@ -50,8 +75,48 @@ export function TableSessionProvider({ children }: { children: React.ReactNode }
     }
   };
 
+  const setTableToken = (token: string | null) => {
+    setTableTokenState(token);
+    if (token !== null) {
+      localStorage.setItem("cafe_table_token", token);
+    } else {
+      localStorage.removeItem("cafe_table_token");
+    }
+  };
+
+  const setSessionToken = (token: string | null) => {
+    setSessionTokenState(token);
+    if (token !== null) {
+      localStorage.setItem("cafe_session_token", token);
+    } else {
+      localStorage.removeItem("cafe_session_token");
+    }
+  };
+
   // Sync URL if needed or handle changes
   useEffect(() => {
+    const syncFromUrl = () => {
+      const params = new URLSearchParams(window.location.search);
+      const tableParam = params.get("table");
+      const tokenParam = params.get("token");
+
+      if (tableParam) {
+        const parsed = parseInt(tableParam, 10);
+        if (!isNaN(parsed) && parsed !== tableId) {
+          setTableIdState(parsed);
+          localStorage.setItem("cafe_table_id", parsed.toString());
+          
+          if (tokenParam) {
+            setTableTokenState(tokenParam);
+            localStorage.setItem("cafe_table_token", tokenParam);
+          } else {
+            setTableTokenState(null);
+            localStorage.removeItem("cafe_table_token");
+          }
+        }
+      }
+    };
+
     const handlePopState = () => {
       const match = window.location.pathname.match(/^\/table\/(\d+)/);
       if (match) {
@@ -61,14 +126,17 @@ export function TableSessionProvider({ children }: { children: React.ReactNode }
           localStorage.setItem("cafe_table_id", parsed.toString());
         }
       }
+      syncFromUrl();
     };
 
     window.addEventListener("popstate", handlePopState);
+    syncFromUrl();
+
     return () => window.removeEventListener("popstate", handlePopState);
   }, [tableId]);
 
   return (
-    <TableSessionContext.Provider value={{ tableId, setTableId }}>
+    <TableSessionContext.Provider value={{ tableId, setTableId, tableToken, setTableToken, sessionToken, setSessionToken }}>
       {children}
     </TableSessionContext.Provider>
   );

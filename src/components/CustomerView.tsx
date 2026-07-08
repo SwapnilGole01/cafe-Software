@@ -19,7 +19,8 @@ import {
   ShoppingBag,
   MessageSquare,
   Receipt,
-  ClipboardList
+  ClipboardList,
+  Lock
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -28,7 +29,7 @@ interface CustomerViewProps {
 }
 
 export default function CustomerView({ tableId: propTableId }: CustomerViewProps) {
-  const { tableId, setTableId } = useTableSession();
+  const { tableId, setTableId, setSessionToken } = useTableSession();
   const activeTableId = tableId ?? propTableId;
 
   const [table, setTable] = useState<Table | null>(null);
@@ -113,10 +114,26 @@ export default function CustomerView({ tableId: propTableId }: CustomerViewProps
       setLoading(true);
       setError(null);
 
+      // Check if URL has scan=true
+      const params = new URLSearchParams(window.location.search);
+      const isScan = params.get("scan") === "true";
+
       // 1. Get Table Status and Active Order
-      const tableData = await api.getTableStatus(activeTableId);
+      const tableData = await api.getTableStatus(activeTableId, isScan);
       setTable(tableData.table);
       setActiveOrder(tableData.activeOrder);
+
+      // Store the sessionToken returned from the server if it exists!
+      if (tableData.sessionToken) {
+        setSessionToken(tableData.sessionToken);
+      }
+
+      // If we did a scan, clean up the scan query parameter so a normal page reload doesn't trigger a new session
+      if (isScan) {
+        const newUrl = new URL(window.location.href);
+        newUrl.searchParams.delete("scan");
+        window.history.replaceState({}, "", newUrl.toString());
+      }
 
       // Auto-set tab to tracker if they have an active order on initial load
       if (tableData.activeOrder && tableData.activeOrder.status !== "completed") {
@@ -138,9 +155,7 @@ export default function CustomerView({ tableId: propTableId }: CustomerViewProps
     loadData();
 
     // Set up Socket.io client
-    const socket = io({
-      transports: ["websocket", "polling"],
-    });
+    const socket = io();
 
     socket.emit("join-table", activeTableId);
 
@@ -223,6 +238,10 @@ export default function CustomerView({ tableId: propTableId }: CustomerViewProps
   });
 
   const addToCart = (item: MenuItem) => {
+    if (activeOrder?.billRequested) {
+      showToast("🔒 Ordering locked. Please scan your table QR code to start a new order.");
+      return;
+    }
     setCart((prev) => {
       const existing = prev.find((c) => c.item.id === item.id);
       if (existing) {
@@ -261,6 +280,10 @@ export default function CustomerView({ tableId: propTableId }: CustomerViewProps
   // Place order via POST /api/orders endpoint or PATCH /api/orders/:id/items
   const handleCheckout = async () => {
     if (cart.length === 0) return;
+    if (activeOrder?.billRequested) {
+      showToast("🔒 Ordering locked. Please scan your table QR code to start a new order.");
+      return;
+    }
     setOrderPlacing(true);
     setError(null);
 
@@ -297,6 +320,11 @@ export default function CustomerView({ tableId: propTableId }: CustomerViewProps
 
   const handleEditOrder = () => {
     if (!activeOrder || !activeOrder.items) return;
+
+    if (activeOrder.billRequested) {
+      showToast("🔒 Ordering locked. Please scan your table QR code to start a new order.");
+      return;
+    }
 
     if (activeOrder.status === "ready" || activeOrder.status === "completed") {
       showToast("Cannot edit this order: it is already ready or completed!");
@@ -343,11 +371,11 @@ export default function CustomerView({ tableId: propTableId }: CustomerViewProps
     }
   };
 
-  const handleTrackerFeedbackSubmit = async (rating: number, comment: string) => {
+  const handleTrackerFeedbackSubmit = async (rating: number, comment: string, customerName?: string) => {
     if (!activeOrder) return;
     setFeedbackLoading(true);
     try {
-      await api.submitFeedback(activeOrder.id, rating, comment);
+      await api.submitFeedback(activeOrder.id, rating, comment, customerName);
       setFeedbackSubmitted(true);
     } catch (err: any) {
       console.error(err);
@@ -507,7 +535,7 @@ export default function CustomerView({ tableId: propTableId }: CustomerViewProps
             </div>
             <div>
               <h1 className="text-base font-extrabold text-slate-900 tracking-tight leading-none">
-                cafe Software
+                DEV STUDIO
               </h1>
               <p className="text-[10px] text-amber-600 font-extrabold tracking-wider mt-1.5 uppercase">
                 {table?.label || `Table ${activeTableId}`}
@@ -580,6 +608,18 @@ export default function CustomerView({ tableId: propTableId }: CustomerViewProps
                 {cartItemCount} {cartItemCount === 1 ? "item" : "items"} selected. Review and place your order.
               </p>
             </div>
+
+            {activeOrder?.billRequested && (
+              <div className="bg-rose-50 border border-rose-200 text-rose-800 p-4 rounded-2xl flex items-start gap-3 text-xs leading-relaxed shadow-sm">
+                <Lock className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-extrabold text-rose-900">Ordering Locked (Bill Requested)</p>
+                  <p className="text-slate-600 mt-1">
+                    Your bill has been requested. To place more orders or start a new session, please <strong>re-scan the QR code</strong> on your table.
+                  </p>
+                </div>
+              </div>
+            )}
 
             {cart.length === 0 ? (
               <div className="bg-white rounded-3xl border border-slate-150 p-12 text-center text-slate-400">
@@ -692,7 +732,7 @@ export default function CustomerView({ tableId: propTableId }: CustomerViewProps
                 {/* Place / Update Order Button */}
                 <button
                   onClick={handleCheckout}
-                  disabled={orderPlacing}
+                  disabled={orderPlacing || !!activeOrder?.billRequested}
                   className="w-full py-4 bg-amber-500 hover:bg-amber-600 text-slate-950 font-extrabold text-sm rounded-2xl flex items-center justify-center gap-2 cursor-pointer shadow-md transition-all disabled:opacity-50"
                 >
                   {orderPlacing ? (
@@ -724,6 +764,18 @@ export default function CustomerView({ tableId: propTableId }: CustomerViewProps
                 Tap on dishes to add them to your order, specify custom options, and check out instantly.
               </p>
             </div>
+
+            {activeOrder?.billRequested && (
+              <div className="bg-rose-50 border border-rose-200 text-rose-800 p-4 rounded-2xl flex items-start gap-3 text-xs leading-relaxed shadow-sm">
+                <Lock className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-extrabold text-rose-900">Ordering Locked (Bill Requested)</p>
+                  <p className="text-slate-600 mt-1">
+                    Your bill has been requested. To place a new order or start a new session, please <strong>re-scan the QR code</strong> on your table.
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* Categories Scroll Tabs */}
             <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none snap-x">
